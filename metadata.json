@@ -1,0 +1,6 @@
+{
+  "name": "Cachar DLSA",
+  "description": "Offline Case Records manager for Cachar District Legal Services Authority",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
