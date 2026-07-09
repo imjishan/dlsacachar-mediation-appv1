@@ -9,13 +9,20 @@ data class CaseRecord(
     val category: String,
     val courtReferredFrom: String,
     val petitioner: String,
+    val petitionerPhone: String,
     val respondent: String,
+    val respondentPhone: String,
     val intakeDate: String, // "YYYY-MM-DD" or similar format
     val firstMediationDate: String, // Date of first mediation
     val reportDate: String, // Date for report/fixing
     val mediator: String,
-    val status: String // "Registered", "Settled", "Not Settled", etc.
-)
+    val status: String, // "Registered", "Settled", "Not Settled", etc.
+    val nextDate: String = "" // Added for next session date tracking
+) {
+    val searchIndex: String by lazy {
+        "$caseNumber|$petitioner|$petitionerPhone|$respondent|$respondentPhone|$mediator".lowercase()
+    }
+}
 
 object CaseRecordMapper {
     fun caseToJson(case: CaseRecord): String {
@@ -26,12 +33,15 @@ object CaseRecordMapper {
   "category": "${escapeJson(case.category)}",
   "courtReferredFrom": "${escapeJson(case.courtReferredFrom)}",
   "petitioner": "${escapeJson(case.petitioner)}",
+  "petitionerPhone": "${escapeJson(case.petitionerPhone)}",
   "respondent": "${escapeJson(case.respondent)}",
+  "respondentPhone": "${escapeJson(case.respondentPhone)}",
   "intakeDate": "${escapeJson(case.intakeDate)}",
   "firstMediationDate": "${escapeJson(case.firstMediationDate)}",
   "reportDate": "${escapeJson(case.reportDate)}",
   "mediator": "${escapeJson(case.mediator)}",
-  "status": "${escapeJson(case.status)}"
+  "status": "${escapeJson(case.status)}",
+  "nextDate": "${escapeJson(case.nextDate)}"
 }"""
     }
 
@@ -54,12 +64,15 @@ object CaseRecordMapper {
             category = obj.optString("category", ""),
             courtReferredFrom = obj.optString("courtReferredFrom", ""),
             petitioner = obj.optString("petitioner", ""),
+            petitionerPhone = obj.optString("petitionerPhone", "N/A").ifEmpty { "N/A" },
             respondent = obj.optString("respondent", ""),
+            respondentPhone = obj.optString("respondentPhone", "N/A").ifEmpty { "N/A" },
             intakeDate = intake,
             firstMediationDate = obj.optString("firstMediationDate", intake),
             reportDate = obj.optString("reportDate", ""),
             mediator = obj.optString("mediator", ""),
-            status = obj.optString("status", "")
+            status = obj.optString("status", ""),
+            nextDate = obj.optString("nextDate", "")
         )
     }
 
