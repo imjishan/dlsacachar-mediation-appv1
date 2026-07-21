@@ -14,11 +14,24 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.Keep
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -209,128 +222,254 @@ fun MainAppScreen(viewModel: CaseViewModel) {
         ) {
             Scaffold(
                 topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = "Cachar DLSA Registry",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface
+                    if (showCaseDetailDialog != null) {
+                        val detailCase = showCaseDetailDialog!!
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { showCaseDetailDialog = null }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back to List",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
-                                Text(
-                                    text = when (val filter = currentFilter) {
-                                        is Filter.All -> "All Records • ${casesState.value.size}"
-                                        is Filter.Status -> "Filtered • ${filter.status}"
-                                        is Filter.MonthYear -> "Folder • ${filter.month} ${filter.year}"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            if (showCaseDetailDialog != null) {
-                                IconButton(onClick = { showCaseDetailDialog = null }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back to List",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            } else {
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        if (drawerState.isClosed) drawerState.open() else drawerState.close()
-                                    }
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Menu,
-                                        contentDescription = "Open Drawer Menu",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        },
-                        actions = {
-                            // Selection Mode toggle
-                            if (casesState.value.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    isSelectionMode = !isSelectionMode
-                                    if (!isSelectionMode) {
-                                        selectedCases = emptySet()
-                                    }
-                                }) {
-                                    Icon(
-                                        imageVector = if (isSelectionMode) Icons.Default.Close else Icons.Default.EditCalendar,
-                                        contentDescription = "Toggle Selection Mode",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
                             }
 
-                            // Export Button (TSV to clipboard & share)
-                            if (casesState.value.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    val tsvText = exportToTsv(casesState.value)
-                                    // Copy to clipboard
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Case Details",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp
+                                    ),
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Cachar DLSA Registry",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    color = TextSecondary
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    caseToEdit = detailCase
+                                    showCaseDetailDialog = null
+                                    showAddEditDialog = true
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Edit,
+                                    contentDescription = "Edit Case",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val tsvText = exportToTsv(listOf(detailCase))
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     val clip = ClipData.newPlainText("Cachar DLSA Case TSV Export", tsvText)
                                     clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Case TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
 
-                                    // Share intent
                                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
-                                        putExtra(Intent.EXTRA_SUBJECT, "Cachar DLSA Case Registry Export")
+                                        putExtra(Intent.EXTRA_SUBJECT, "Cachar DLSA Case Detail Export")
                                         putExtra(Intent.EXTRA_TEXT, tsvText)
                                     }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share Case Records (TSV)"))
-                                }) {
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share Case Record"))
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share Case",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Left Button (Menu or Back)
+                            Surface(
+                                onClick = {
+                                    scope.launch {
+                                        if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = SecondarySurfaceColor,
+                                border = BorderStroke(1.dp, DividerColor),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Export and Share Database",
-                                        tint = MaterialTheme.colorScheme.onSurface
+                                        imageVector = Icons.Default.Menu,
+                                        contentDescription = "Open Drawer Menu",
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
 
-                            // Delete selected button
-                            if (isSelectionMode && selectedCases.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    showMultiDeleteConfirmation = true
-                                    multiDeleteConfirmationInput = ""
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Selected Records",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            // Center Title / Subtitle
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Cachar DLSA Registry",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp
+                                    ),
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = when (val filter = currentFilter) {
+                                        is Filter.All -> "All Records • ${casesState.value.size} Case${if (casesState.value.size == 1) "" else "s"}"
+                                        is Filter.Status -> "Filtered • ${filter.status}"
+                                        is Filter.MonthYear -> "Folder • ${filter.month} ${filter.year}"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    color = TextMuted
+                                )
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Selection mode button
+                                if (casesState.value.isNotEmpty()) {
+                                    Surface(
+                                        onClick = {
+                                            isSelectionMode = !isSelectionMode
+                                            if (!isSelectionMode) {
+                                                selectedCases = emptySet()
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = SecondarySurfaceColor,
+                                        border = BorderStroke(1.dp, DividerColor),
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = if (isSelectionMode) Icons.Default.Close else Icons.Default.EditCalendar,
+                                                contentDescription = "Toggle Selection Mode",
+                                                tint = TextPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Export / Share button
+                                if (casesState.value.isNotEmpty()) {
+                                    Surface(
+                                        onClick = {
+                                            val tsvText = exportToTsv(casesState.value)
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("Cachar DLSA Case TSV Export", tsvText)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
+
+                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_SUBJECT, "Cachar DLSA Case Registry Export")
+                                                putExtra(Intent.EXTRA_TEXT, tsvText)
+                                            }
+                                            context.startActivity(Intent.createChooser(shareIntent, "Share Case Records (TSV)"))
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = SecondarySurfaceColor,
+                                        border = BorderStroke(1.dp, DividerColor),
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.Share,
+                                                contentDescription = "Export and Share Database",
+                                                tint = TextPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Delete selected button
+                                if (isSelectionMode && selectedCases.isNotEmpty()) {
+                                    Surface(
+                                        onClick = {
+                                            showMultiDeleteConfirmation = true
+                                            multiDeleteConfirmationInput = ""
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete Selected Records",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                            titleContentColor = MaterialTheme.colorScheme.onSurface,
-                            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                            actionIconContentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    )
+                        }
+                    }
                 },
                 floatingActionButton = {
-                    FloatingActionButton(
-                        onClick = {
-                            caseToEdit = null
-                            showAddEditDialog = true
-                        },
-                        containerColor = PrimaryBlue,
-                        contentColor = TextPrimary,
-                        shape = RoundedCornerShape(22.dp),
-                        modifier = Modifier.testTag("add_case_button")
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                    colors = listOf(PrimaryBlue, Color(0xFF635BFF))
+                                ),
+                                shape = RoundedCornerShape(20.dp)
+                            )
+                            .clickable {
+                                caseToEdit = null
+                                showAddEditDialog = true
+                            }
+                            .testTag("add_case_button"),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Register New Case",
-                            tint = TextPrimary
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -364,217 +503,244 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                         }
                     }
 
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Search text field
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = InputFieldColor,
-                            border = BorderStroke(1.dp, DividerColor),
-                            shadowElevation = 0.dp
-                        ) {
-                            TextField(
-                                value = searchText,
-                                onValueChange = { searchText = it },
-                                placeholder = { 
-                                    Text(
-                                        text = "Search by No., Petitioner, Opponent...",
-                                        color = TextMuted,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                leadingIcon = { 
-                                    Icon(
-                                        imageVector = Icons.Default.Search, 
-                                        contentDescription = "Search Icon",
-                                        tint = TextMuted
-                                    ) 
-                                },
-                                trailingIcon = {
-                                    if (searchText.isNotEmpty()) {
-                                        IconButton(onClick = { searchText = "" }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Clear, 
-                                                contentDescription = "Clear Search",
-                                                tint = TextSecondary
-                                            )
-                                        }
-                                    } else {
-                                        IconButton(onClick = {
-                                            scope.launch {
-                                                if (drawerState.isClosed) drawerState.open() else drawerState.close()
-                                            }
-                                        }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Tune,
-                                                contentDescription = "Filters",
-                                                tint = TextSecondary
-                                            )
-                                        }
-                                    }
-                                },
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary
-                                ),
-                                singleLine = true,
+                        // 1. The Main Content (Search bar, Loading/Empty stats, LazyColumn list of cases)
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Search text field
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .testTag("search_field_case")
-                                    .height(54.dp)
-                            )
-                        }
-
-                        if (isSelectionMode) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = InputFieldColor,
+                                border = BorderStroke(1.dp, DividerColor),
+                                shadowElevation = 0.dp
                             ) {
-                                Text(
-                                    text = "${selectedCases.size} records selected for deletion",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Button(
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                    onClick = {
-                                        showMultiDeleteConfirmation = true
-                                        multiDeleteConfirmationInput = ""
+                                TextField(
+                                    value = searchText,
+                                    onValueChange = { searchText = it },
+                                    placeholder = { 
+                                        Text(
+                                            text = "Search by No., Petitioner, Opponent...",
+                                            color = TextMuted,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
                                     },
-                                    enabled = selectedCases.isNotEmpty(),
-                                    modifier = Modifier.testTag("multi_delete_trigger_btn")
+                                    leadingIcon = { 
+                                        Icon(
+                                            imageVector = Icons.Default.Search, 
+                                            contentDescription = "Search Icon",
+                                            tint = TextMuted
+                                        ) 
+                                    },
+                                    trailingIcon = {
+                                        if (searchText.isNotEmpty()) {
+                                            IconButton(onClick = { searchText = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Clear, 
+                                                    contentDescription = "Clear Search",
+                                                    tint = TextSecondary
+                                                )
+                                            }
+                                        } else {
+                                            IconButton(onClick = {
+                                                scope.launch {
+                                                    if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                                                }
+                                            }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Tune,
+                                                    contentDescription = "Filters",
+                                                    tint = PrimaryBlue
+                                                )
+                                            }
+                                        }
+                                    },
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("search_field_case")
+                                        .height(54.dp)
+                                )
+                            }
+
+                            if (isSelectionMode) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Delete Selected", style = MaterialTheme.typography.labelSmall)
+                                    Text(
+                                        text = "${selectedCases.size} records selected for deletion",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Button(
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                        onClick = {
+                                            showMultiDeleteConfirmation = true
+                                            multiDeleteConfirmationInput = ""
+                                        },
+                                        enabled = selectedCases.isNotEmpty(),
+                                        modifier = Modifier.testTag("multi_delete_trigger_btn")
+                                    ) {
+                                        Text("Delete Selected", style = MaterialTheme.typography.labelSmall)
+                                    }
                                 }
                             }
-                        }
 
-                        if (showCaseDetailDialog != null) {
-                            val detailCase = showCaseDetailDialog!!
-                            BackHandler(enabled = true) {
-                                showCaseDetailDialog = null
-                            }
-                            CaseDetailContent(
-                                case = detailCase,
-                                onDismiss = { showCaseDetailDialog = null },
-                                onEdit = {
-                                    caseToEdit = detailCase
-                                    showCaseDetailDialog = null
-                                    showAddEditDialog = true
-                                },
-                                onDelete = {
-                                    viewModel.deleteCaseRecord(detailCase) { deleted ->
-                                        showCaseDetailDialog = null
-                                        if (deleted) {
-                                            Toast.makeText(context, "Case deleted successfully", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Failed to delete case file", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                onStatusChange = { newStatus ->
-                                    val updatedCase = detailCase.copy(status = newStatus)
-                                    viewModel.saveCaseRecord(updatedCase) { success, msg ->
-                                        if (success) {
-                                            showCaseDetailDialog = updatedCase
-                                            Toast.makeText(context, "Status updated to $newStatus", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Failed to update status: $msg", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                onNextDateChange = { newNextDate ->
-                                    val updatedCase = detailCase.copy(nextDate = newNextDate)
-                                    viewModel.saveCaseRecord(updatedCase) { success, msg ->
-                                        if (success) {
-                                            showCaseDetailDialog = updatedCase
-                                            Toast.makeText(context, "Next date updated to ${formatToDisplayImage(newNextDate)}", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Failed to update next date: $msg", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        } else if (isLoadingState.value) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                            }
-                        } else if (filteredCases.isEmpty()) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(24.dp),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FolderOpen,
-                                    contentDescription = "Empty Directory",
-                                    tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(72.dp)
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "No cases match the query or filter.",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Press (+) below to register a new file or select a different folder in the sidebar.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        } else {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(filteredCases, key = { it.caseNumber }) { case ->
-                                    CaseRecordBentoCard(
-                                        case = case,
-                                        isSelected = selectedCases.contains(case),
-                                        isSelectionMode = isSelectionMode,
-                                        onToggleSelected = {
-                                            selectedCases = if (selectedCases.contains(case)) {
-                                                selectedCases - case
-                                            } else {
-                                                selectedCases + case
-                                            }
-                                        },
-                                        onClick = {
-                                            if (isSelectionMode) {
+                            if (isLoadingState.value) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                }
+                            } else if (filteredCases.isEmpty()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(24.dp),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FolderOpen,
+                                        contentDescription = "Empty Directory",
+                                        tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(72.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No cases match the query or filter.",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Press (+) below to register a new file or select a different folder in the sidebar.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(filteredCases, key = { it.caseNumber }) { case ->
+                                        CaseRecordBentoCard(
+                                            case = case,
+                                            isSelected = selectedCases.contains(case),
+                                            isSelectionMode = isSelectionMode,
+                                            onToggleSelected = {
                                                 selectedCases = if (selectedCases.contains(case)) {
                                                     selectedCases - case
                                                 } else {
                                                     selectedCases + case
                                                 }
-                                            } else {
-                                                showCaseDetailDialog = case
+                                            },
+                                            onClick = {
+                                                if (isSelectionMode) {
+                                                    selectedCases = if (selectedCases.contains(case)) {
+                                                        selectedCases - case
+                                                    } else {
+                                                        selectedCases + case
+                                                    }
+                                                } else {
+                                                    showCaseDetailDialog = case
+                                                }
+                                            },
+                                            onEditClick = {
+                                                caseToEdit = case
+                                                showAddEditDialog = true
+                                            },
+                                            onDeleteClick = {
+                                                viewModel.deleteCaseRecord(case) { deleted ->
+                                                    if (deleted) {
+                                                        Toast.makeText(context, "Case deleted successfully", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "Failed to delete case file", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            },
+                                            onStatusChange = { newStatus ->
+                                                val updatedCase = case.copy(status = newStatus)
+                                                viewModel.saveCaseRecord(updatedCase) { success, msg ->
+                                                    if (success) {
+                                                        Toast.makeText(context, "Status updated to $newStatus", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "Failed to update status: $msg", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            },
+                                            onNextDateChange = { newNextDate ->
+                                                val updatedCase = case.copy(nextDate = newNextDate)
+                                                viewModel.saveCaseRecord(updatedCase) { success, msg ->
+                                                    if (success) {
+                                                        Toast.makeText(context, "Next date updated to ${formatToDisplayImage(newNextDate)}", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "Failed to update next date: $msg", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
                                             }
-                                        },
-                                        onEditClick = {
-                                            caseToEdit = case
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. The Case Detail View (overlaying on top with slide-in from bottom animation)
+                        AnimatedVisibility(
+                            visible = showCaseDetailDialog != null,
+                            enter = slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            ) + fadeIn(animationSpec = tween(300)),
+                            exit = slideOutVertically(
+                                targetOffsetY = { it },
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                )
+                            ) + fadeOut(animationSpec = tween(250)),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            val detailCase = showCaseDetailDialog
+                            if (detailCase != null) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.background)
+                                ) {
+                                    BackHandler(enabled = true) {
+                                        showCaseDetailDialog = null
+                                    }
+                                    CaseDetailContent(
+                                        case = detailCase,
+                                        onDismiss = { showCaseDetailDialog = null },
+                                        onEdit = {
+                                            caseToEdit = detailCase
+                                            showCaseDetailDialog = null
                                             showAddEditDialog = true
                                         },
-                                        onDeleteClick = {
-                                            viewModel.deleteCaseRecord(case) { deleted ->
+                                        onDelete = {
+                                            viewModel.deleteCaseRecord(detailCase) { deleted ->
+                                                showCaseDetailDialog = null
                                                 if (deleted) {
                                                     Toast.makeText(context, "Case deleted successfully", Toast.LENGTH_SHORT).show()
                                                 } else {
@@ -583,9 +749,10 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                             }
                                         },
                                         onStatusChange = { newStatus ->
-                                            val updatedCase = case.copy(status = newStatus)
+                                            val updatedCase = detailCase.copy(status = newStatus)
                                             viewModel.saveCaseRecord(updatedCase) { success, msg ->
                                                 if (success) {
+                                                    showCaseDetailDialog = updatedCase
                                                     Toast.makeText(context, "Status updated to $newStatus", Toast.LENGTH_SHORT).show()
                                                 } else {
                                                     Toast.makeText(context, "Failed to update status: $msg", Toast.LENGTH_SHORT).show()
@@ -593,20 +760,21 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                             }
                                         },
                                         onNextDateChange = { newNextDate ->
-                                            val updatedCase = case.copy(nextDate = newNextDate)
+                                            val updatedCase = detailCase.copy(nextDate = newNextDate)
                                             viewModel.saveCaseRecord(updatedCase) { success, msg ->
                                                 if (success) {
+                                                    showCaseDetailDialog = updatedCase
                                                     Toast.makeText(context, "Next date updated to ${formatToDisplayImage(newNextDate)}", Toast.LENGTH_SHORT).show()
                                                 } else {
                                                     Toast.makeText(context, "Failed to update next date: $msg", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
-                                        }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
                             }
                         }
-                    }
                 }
             }
         }
@@ -789,21 +957,34 @@ fun CustomDrawerItem(
     showArrow: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (selected) PrimaryBlue.copy(alpha = 0.08f) else Color.Transparent,
+        label = "BgColor"
+    )
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 3.dp else 0.dp,
+        label = "IndicatorWidth"
+    )
+    val startPadding by animateDpAsState(
+        targetValue = if (selected) 16.dp else 12.dp,
+        label = "StartPadding"
+    )
+
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        color = if (selected) PrimaryBlue.copy(alpha = 0.08f) else Color.Transparent,
+        color = backgroundColor,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 2.dp)
             .height(48.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (selected) {
+            if (selected || indicatorWidth > 0.dp) {
                 // High contrast left indicator bar
                 Box(
                     modifier = Modifier
-                        .width(3.dp)
+                        .width(indicatorWidth)
                         .height(24.dp)
                         .background(PrimaryBlue, shape = RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
                         .align(Alignment.CenterStart)
@@ -813,7 +994,7 @@ fun CustomDrawerItem(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = if (selected) 16.dp else 12.dp, end = 12.dp),
+                    .padding(start = startPadding, end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Icon
@@ -1391,6 +1572,7 @@ fun OnboardingScreen(onSelectDirectory: () -> Unit) {
 }
 
 // Case Card representation utilizing modern bento structures
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CaseRecordBentoCard(
     case: CaseRecord,
@@ -1404,296 +1586,246 @@ fun CaseRecordBentoCard(
     onStatusChange: ((String) -> Unit)? = null,
     onNextDateChange: ((String) -> Unit)? = null
 ) {
-    var showStatusDropdown by remember { mutableStateOf(false) }
-    var showVersionDropdown by remember { mutableStateOf(false) }
+    val cardBorderWidth by animateDpAsState(
+        targetValue = if (isSelected) 2.dp else 1.dp,
+        label = "BorderWidth"
+    )
+    val cardBorderColor by animateColorAsState(
+        targetValue = if (isSelected) PrimaryBlue else Color(0xFF1F355C),
+        label = "BorderColor"
+    )
+    val cardScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.015f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "CardScale"
+    )
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
             .clickable(onClick = onClick)
             .border(
-                width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else DividerColor,
-                shape = RoundedCornerShape(20.dp)
+                width = cardBorderWidth,
+                color = cardBorderColor,
+                shape = RoundedCornerShape(16.dp)
             ),
         colors = CardDefaults.cardColors(
             containerColor = SurfaceCardColor
         ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // ROW 1: HEADERS & VALUES
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isSelectionMode) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onToggleSelected() },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.primary,
-                            uncheckedColor = Color.Gray
-                        ),
-                        modifier = Modifier.testTag("checkbox_${case.caseNumber}").padding(end = 4.dp)
-                    )
-                }
-
-                // The info columns: CASE, ID / YEAR, PARTIES
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // COLUMN 1: CASE
-                    Column(modifier = Modifier.weight(1.5f)) {
-                        Text(
-                            text = "CASE",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                letterSpacing = 0.5.sp
-                            ),
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = case.category.uppercase(),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            ),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    // Vertical Divider
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(24.dp)
-                            .background(DividerColor.copy(alpha = 0.4f))
-                    )
-
-                    // COLUMN 2: ID / YEAR
-                    Column(modifier = Modifier.weight(2.5f)) {
-                        Text(
-                            text = "ID / YEAR",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                letterSpacing = 0.5.sp
-                            ),
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "${case.caseNumber} / ${case.year}",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            ),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    // Vertical Divider
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(24.dp)
-                            .background(DividerColor.copy(alpha = 0.4f))
-                    )
-
-                    // COLUMN 3: PARTIES
-                    Column(modifier = Modifier.weight(5f)) {
-                        Text(
-                            text = "PARTIES",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                letterSpacing = 0.5.sp
-                            ),
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val partiesText = buildAnnotatedString {
-                            withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)) {
-                                append(case.petitioner)
-                            }
-                            withStyle(style = SpanStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp, color = Color(0xFF5F82B5))) {
-                                append(" vs ")
-                            }
-                            withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)) {
-                                append(case.respondent)
-                            }
-                        }
-                        Text(
-                            text = partiesText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelected() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = PrimaryBlue,
+                        uncheckedColor = Color.Gray
+                    ),
+                    modifier = Modifier
+                        .testTag("checkbox_${case.caseNumber}")
+                        .padding(end = 8.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // ROW 2: INTERACTIVE BUTTONS
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
-                // Edit Button
-                Surface(
-                    onClick = onEditClick,
-                    shape = RoundedCornerShape(12.dp),
-                    color = SecondarySurfaceColor,
-                    border = BorderStroke(1.dp, DividerColor),
-                    modifier = Modifier.size(38.dp)
+                // ROW 1: TAGS
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Category Tag (PRC)
                     Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .background(Color(0xFF1B2E53), shape = RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "Edit",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                // Delete Button
-                Surface(
-                    onClick = onDeleteClick,
-                    shape = RoundedCornerShape(12.dp),
-                    color = SecondarySurfaceColor,
-                    border = BorderStroke(1.dp, DividerColor),
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = "Delete",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                // Status Badge (Pill, Non-dropdown to match design)
-                val statusColor = when (case.status) {
-                    "Settled" -> SuccessGreen
-                    "Not Settled" -> ErrorRed
-                    "Registered" -> SuccessGreen
-                    else -> WarningOrange
-                }
-                val statusBg = statusColor.copy(alpha = 0.08f)
-                val statusBorder = statusColor.copy(alpha = 0.25f)
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = statusBg,
-                    border = BorderStroke(1.dp, statusBorder),
-                    modifier = Modifier.height(38.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(statusColor, shape = androidx.compose.foundation.shape.CircleShape)
-                        )
                         Text(
-                            text = case.status,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            ),
-                            color = statusColor
+                            text = case.category.uppercase(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
                         )
                     }
-                }
 
-                // Next Date Interactive Selector (replaced Version Dropdown 2.0 with a chevron)
-                val context = LocalContext.current
-                val nextDateText = if (case.nextDate.isNotEmpty()) {
-                    formatToDisplayImage(case.nextDate)
-                } else {
-                    "Set Next Date"
-                }
+                    // Status Badge (Registered)
+                    val statusColor = when (case.status) {
+                        "Settled" -> SuccessGreen
+                        "Not Settled" -> ErrorRed
+                        "Registered" -> SuccessGreen
+                        else -> WarningOrange
+                    }
+                    val statusBg = when (case.status) {
+                        "Settled" -> Color(0xFF142921)
+                        "Not Settled" -> Color(0xFF2C1E1D)
+                        "Registered" -> Color(0xFF142921)
+                        else -> Color(0xFF2C241E)
+                    }
 
-                Surface(
-                    onClick = {
-                        if (onNextDateChange != null) {
-                            triggerDatePicker(context) { pickedDate ->
-                                onNextDateChange(pickedDate)
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    color = SecondarySurfaceColor,
-                    border = BorderStroke(1.dp, DividerColor),
-                    modifier = Modifier.height(38.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .background(statusBg, shape = RoundedCornerShape(50))
+                            .border(1.dp, statusColor.copy(alpha = 0.25f), shape = RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "Next Date Icon",
-                            tint = PrimaryBlue,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Column(
-                            verticalArrangement = Arrangement.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            Text(
-                                text = "Next Sitting",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = TextSecondary
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .background(statusColor, shape = androidx.compose.foundation.shape.CircleShape)
                             )
                             Text(
-                                text = nextDateText,
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
-                                ),
-                                color = if (case.nextDate.isNotEmpty()) TextPrimary else TextMuted
+                                text = case.status,
+                                color = statusColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
                             )
                         }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Change Date",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(14.dp)
-                        )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // ROW 2: CASE NUMBER
+                Text(
+                    text = "${case.caseNumber} / ${case.year}",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 20.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // ROW 3: PARTIES (with FlowRow support for wrapping)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = case.petitioner,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1B2E53), shape = RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .align(Alignment.CenterVertically)
+                    ) {
+                        Text(
+                            text = "vs",
+                            color = Color(0xFF5B8CFF),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Text(
+                        text = case.respondent,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // ROW 4: DATES SUB-CARDS
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    DateSubCard(
+                        label = "Intake Date",
+                        dateValue = case.intakeDate,
+                        iconColor = WarningOrange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DateSubCard(
+                        label = "First Mediation",
+                        dateValue = case.firstMediationDate,
+                        iconColor = PrimaryBlue,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DateSubCard(
+                        label = "Report Date",
+                        dateValue = case.reportDate,
+                        iconColor = AccentPurple,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DateSubCard(
+    label: String,
+    dateValue: String,
+    iconColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val displayDate = if (dateValue.isNotEmpty()) formatToDisplayImage(dateValue) else "N/A"
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xFF111926), // Sleek lighter dark card container matching design
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.CalendarToday,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(13.dp)
+            )
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = TextSecondary
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(1.dp))
+                Text(
+                    text = displayDate,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -2352,132 +2484,724 @@ fun CaseDetailContent(
     onNextDateChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var noteText by remember { mutableStateOf("") }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(12.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-            // Top section: Bento Card of the case itself
-            CaseRecordBentoCard(
-                case = case,
-                isSelected = false,
-                isSelectionMode = false,
-                onToggleSelected = {},
-                onClick = onDismiss, // Clicking card collapses detail view
-                onEditClick = onEdit,
-                onDeleteClick = onDelete,
-                isDetailView = true,
-                onStatusChange = onStatusChange,
-                onNextDateChange = onNextDateChange
+        // 1. CASE HEADER CARD
+        CaseRecordBentoCard(
+            case = case,
+            isSelected = false,
+            isSelectionMode = false,
+            onToggleSelected = {},
+            onClick = {}, // Clicking top card inside details doesn't close it, it's a header
+            onEditClick = onEdit,
+            onDeleteClick = onDelete,
+            isDetailView = true,
+            onStatusChange = onStatusChange,
+            onNextDateChange = onNextDateChange
+        )
+
+        // 2. ACTION BUTTONS ROW (Edit Case, Delete Case, More Actions)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Edit Case
+            Surface(
+                onClick = onEdit,
+                shape = RoundedCornerShape(10.dp),
+                color = SurfaceCardColor,
+                border = BorderStroke(1.dp, DividerColor),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit Case",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Edit Case",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        ),
+                        color = Color.White
+                    )
+                }
+            }
+
+            // Delete Case
+            Surface(
+                onClick = onDelete,
+                shape = RoundedCornerShape(10.dp),
+                color = SurfaceCardColor,
+                border = BorderStroke(1.dp, DividerColor),
+                modifier = Modifier
+                    .weight(1.1f)
+                    .height(40.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Case",
+                        tint = ErrorRed,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Delete Case",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        ),
+                        color = ErrorRed
+                    )
+                }
+            }
+
+            // More Actions
+            var showMoreDropdown by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier
+                    .weight(1.1f)
+                    .height(40.dp)
+            ) {
+                Surface(
+                    onClick = { showMoreDropdown = true },
+                    shape = RoundedCornerShape(10.dp),
+                    color = SurfaceCardColor,
+                    border = BorderStroke(1.dp, DividerColor),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreHoriz,
+                            contentDescription = "More Actions",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "More Actions",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            ),
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showMoreDropdown,
+                    onDismissRequest = { showMoreDropdown = false },
+                    modifier = Modifier
+                        .background(SurfaceCardColor)
+                        .border(1.dp, DividerColor, RoundedCornerShape(8.dp))
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Copy TSV data", color = Color.White, fontSize = 12.sp) },
+                        onClick = {
+                            showMoreDropdown = false
+                            val tsvText = """
+                                Case Number	Year	Category	Court	Petitioner	Respondent	Status
+                                ${case.caseNumber}	${case.year}	${case.category}	${case.courtReferredFrom}	${case.petitioner}	${case.respondent}	${case.status}
+                            """.trimIndent()
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Case TSV", tsvText)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            }
+        }
+
+        // 3. CASE DETAILS SECTION
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "CASE DETAILS",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                ),
+                color = PrimaryBlue
             )
 
-            // Main Case Details Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, DividerColor, RoundedCornerShape(20.dp)),
+                    .border(1.dp, DividerColor, RoundedCornerShape(12.dp)),
                 colors = CardDefaults.cardColors(containerColor = SurfaceCardColor),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
+                        .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // --- CASE DETAILS ---
-                    Text(
-                        text = "CASE DETAILS",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 0.5.sp
-                        ),
-                        color = PrimaryBlue
-                    )
-
-                    DetailRowWithIcon(
-                        icon = Icons.Default.HomeWork,
-                        iconColor = PrimaryBlue,
-                        iconBgColor = Color(0xFF16253B),
-                        title = "Court Jurisdiction",
-                        value = case.courtReferredFrom
-                    )
-
-                    DetailRowWithIcon(
-                        icon = Icons.Default.Person,
-                        iconColor = SuccessGreen,
-                        iconBgColor = Color(0xFF142921),
-                        title = "Mediator",
-                        value = case.mediator
-                    )
-
-                    HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
-
-                    // --- IMPORTANT DATES ---
-                    Text(
-                        text = "IMPORTANT DATES",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 0.5.sp
-                        ),
-                        color = PrimaryBlue
-                    )
-
-                    ImportantDatesRow(
-                        intakeDate = case.intakeDate,
-                        firstMediationDate = case.firstMediationDate,
-                        reportDate = case.reportDate
-                    )
-
-                    HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
-
-                    // --- PARTY DETAILS ---
-                    Text(
-                        text = "PARTY DETAILS",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 0.5.sp
-                        ),
-                        color = PrimaryBlue
-                    )
-
-                    PartyDetailRow(
-                        title = "Informant / Petitioner",
-                        name = case.petitioner,
-                        phone = case.petitionerPhone,
-                        iconColor = PrimaryBlue,
-                        iconBgColor = Color(0xFF16253B)
-                    )
-
-                    HorizontalDivider(color = DividerColor.copy(alpha = 0.3f), thickness = 1.dp)
-
-                    PartyDetailRow(
-                        title = "Defendant / Respondent",
-                        name = case.respondent,
-                        phone = case.respondentPhone,
-                        iconColor = WarningOrange,
-                        iconBgColor = Color(0xFF2C1E14)
-                    )
+                    // Item 1: Court / Jurisdiction
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF1B2E53), shape = RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.HomeWork,
+                                contentDescription = null,
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Court / Jurisdiction",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = case.courtReferredFrom.ifEmpty { "N/A" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                ),
+                                color = Color.White
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
 
                     HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
 
-                    // --- CASE STATUS ---
-                    CaseStatusDropdownRow(
-                        currentStatus = case.status,
-                        onStatusSelected = onStatusChange
-                    )
-
-                    HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
+                    // Item 2: Mediator
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF142921), shape = RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = SuccessGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Mediator",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = case.mediator.ifEmpty { "N/A" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                ),
+                                color = Color.White
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
+
+        // 4. PARTY DETAILS SECTION
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "PARTY DETAILS",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                ),
+                color = PrimaryBlue
+            )
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, DividerColor, RoundedCornerShape(12.dp)),
+                colors = CardDefaults.cardColors(containerColor = SurfaceCardColor),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Row 1: Informant / Petitioner
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF1B2E53), shape = RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Informant / Petitioner",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = case.petitioner.ifEmpty { "N/A" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                ),
+                                color = Color.White
+                            )
+                            if (case.petitionerPhone.isNotEmpty() && case.petitionerPhone != "N/A") {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Phone,
+                                        contentDescription = null,
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = case.petitionerPhone,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                        if (case.petitionerPhone.isNotEmpty() && case.petitionerPhone != "N/A") {
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${case.petitionerPhone}"))
+                                        context.startActivity(dialIntent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Cannot dial ${case.petitionerPhone}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFF1B2E53), shape = RoundedCornerShape(50.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = "Call Informant",
+                                    tint = PrimaryBlue,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
+
+                    // Row 2: Defendant / Respondent
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF2C1E14), shape = RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = WarningOrange,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Defendant / Respondent",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = case.respondent.ifEmpty { "N/A" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                ),
+                                color = Color.White
+                            )
+                            if (case.respondentPhone.isNotEmpty() && case.respondentPhone != "N/A") {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Phone,
+                                        contentDescription = null,
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = case.respondentPhone,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                        if (case.respondentPhone.isNotEmpty() && case.respondentPhone != "N/A") {
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${case.respondentPhone}"))
+                                        context.startActivity(dialIntent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Cannot dial ${case.respondentPhone}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFF2C1E14), shape = RoundedCornerShape(50.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = "Call Respondent",
+                                    tint = WarningOrange,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. CASE STATUS SECTION (Interactive dropdown matching approved design)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "CASE STATUS",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                ),
+                color = PrimaryBlue
+            )
+
+            var expandedStatus by remember { mutableStateOf(false) }
+            val statuses = listOf("Registered", "Settled", "Not Settled", "Mediation 1.0")
+
+            val statusColor = when (case.status) {
+                "Settled" -> SuccessGreen
+                "Not Settled" -> ErrorRed
+                "Registered" -> SuccessGreen
+                else -> WarningOrange
+            }
+            val statusBg = when (case.status) {
+                "Settled" -> Color(0xFF0C1912)
+                "Not Settled" -> Color(0xFF1C0D0D)
+                "Registered" -> Color(0xFF0C1912)
+                else -> Color(0xFF1C130D)
+            }
+            val statusBorder = statusColor.copy(alpha = 0.3f)
+            val statusDesc = when (case.status) {
+                "Registered" -> "This case is currently active and registered."
+                "Settled" -> "This case has been successfully settled."
+                "Not Settled" -> "This case was closed as not settled."
+                else -> "This case is currently in ${case.status} state."
+            }
+
+            Box {
+                Surface(
+                    onClick = { expandedStatus = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = statusBg,
+                    border = BorderStroke(1.dp, statusBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .background(statusColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (case.status == "Not Settled") Icons.Default.Cancel else Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = statusColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = case.status,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                ),
+                                color = statusColor
+                            )
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Text(
+                                text = statusDesc,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = TextSecondary
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Expand Status",
+                            tint = statusColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = expandedStatus,
+                    onDismissRequest = { expandedStatus = false },
+                    modifier = Modifier
+                        .background(SurfaceCardColor)
+                        .border(1.dp, DividerColor, RoundedCornerShape(8.dp))
+                ) {
+                    statuses.forEach { statusOption ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val optColor = when (statusOption) {
+                                        "Settled" -> SuccessGreen
+                                        "Not Settled" -> ErrorRed
+                                        "Registered" -> SuccessGreen
+                                        else -> WarningOrange
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(optColor, RoundedCornerShape(50.dp))
+                                    )
+                                    Text(
+                                        text = statusOption,
+                                        color = if (statusOption == case.status) PrimaryBlue else Color.White,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            },
+                            onClick = {
+                                expandedStatus = false
+                                onStatusChange(statusOption)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 6. NOTES SECTION
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "NOTES",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp
+                ),
+                color = PrimaryBlue
+            )
+
+            OutlinedTextField(
+                value = noteText,
+                onValueChange = { noteText = it },
+                placeholder = {
+                    Text(
+                        text = "Add a note...",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                        color = TextMuted
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Description,
+                        contentDescription = "Notes Icon",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(68.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = SurfaceCardColor,
+                    unfocusedContainerColor = SurfaceCardColor,
+                    focusedBorderColor = PrimaryBlue,
+                    unfocusedBorderColor = DividerColor,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                shape = RoundedCornerShape(10.dp),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // 7. BOTTOM GRADIENT BUTTON (Add Activity / Update)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                        colors = listOf(PrimaryBlue, Color(0xFF4361EE))
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clickable {
+                    Toast.makeText(context, "Activity logged & updated successfully!", Toast.LENGTH_SHORT).show()
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Add Activity / Update",
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    ),
+                    color = Color.White
+                )
+            }
+        }
     }
+}
 
 @Composable
 fun DetailRowWithIcon(
