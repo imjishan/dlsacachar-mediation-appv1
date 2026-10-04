@@ -26,12 +26,53 @@ class CaseViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _tasks = MutableStateFlow<List<TaskItem>>(emptyList())
+    val tasks: StateFlow<List<TaskItem>> = _tasks.asStateFlow()
+
     init {
+        loadTasks()
         val savedUriStr = prefs.getString("selected_dir_uri", null)
         if (savedUriStr != null) {
             _directoryUri.value = savedUriStr
             loadRecords()
         }
+    }
+
+    fun loadTasks() {
+        val jsonStr = prefs.getString("mediation_tasks_list", "") ?: ""
+        _tasks.value = TaskItem.listFromJson(jsonStr)
+    }
+
+    fun addTask(case: CaseRecord?, note: String, onDone: () -> Unit = {}) {
+        val sdf = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault())
+        val dateStr = sdf.format(java.util.Date())
+        val newTask = TaskItem(
+            caseNumber = case?.caseNumber ?: "",
+            caseYear = case?.year ?: "",
+            caseTitle = if (case != null) "${case.petitioner} vs ${case.respondent}" else "",
+            mediator = case?.mediator ?: "",
+            note = note.trim(),
+            date = dateStr,
+            isCompleted = false
+        )
+        val updated = listOf(newTask) + _tasks.value
+        _tasks.value = updated
+        prefs.edit().putString("mediation_tasks_list", TaskItem.listToJson(updated)).apply()
+        onDone()
+    }
+
+    fun toggleTask(taskId: String) {
+        val updated = _tasks.value.map {
+            if (it.id == taskId) it.copy(isCompleted = !it.isCompleted) else it
+        }
+        _tasks.value = updated
+        prefs.edit().putString("mediation_tasks_list", TaskItem.listToJson(updated)).apply()
+    }
+
+    fun deleteTask(taskId: String) {
+        val updated = _tasks.value.filter { it.id != taskId }
+        _tasks.value = updated
+        prefs.edit().putString("mediation_tasks_list", TaskItem.listToJson(updated)).apply()
     }
 
     fun setDirectoryUri(uri: Uri) {

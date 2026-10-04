@@ -25,18 +25,40 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
+import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
@@ -46,6 +68,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -115,10 +138,12 @@ fun MainAppScreen(viewModel: CaseViewModel) {
     val directoryUriState = viewModel.directoryUri.collectAsState()
     val casesState = viewModel.cases.collectAsState()
     val isLoadingState = viewModel.isLoading.collectAsState()
+    val tasksState = viewModel.tasks.collectAsState()
 
     var currentFilter by remember { mutableStateOf<Filter>(Filter.All) }
     var searchText by remember { mutableStateOf("") }
     var showAddEditDialog by remember { mutableStateOf(false) }
+    var showTasksScreen by remember { mutableStateOf(false) }
     var caseToEdit by remember { mutableStateOf<CaseRecord?>(null) }
     
     // State of selected cases for multi-delete
@@ -137,6 +162,103 @@ fun MainAppScreen(viewModel: CaseViewModel) {
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val dismissThresholdPx = with(density) { 110.dp.toPx() }
+    var currentDetailOffsetY by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(showCaseDetailDialog) {
+        if (showCaseDetailDialog != null) {
+            currentDetailOffsetY = 0f
+        }
+    }
+
+    val detailHeaderDragModifier = Modifier.draggable(
+        state = rememberDraggableState { delta ->
+            currentDetailOffsetY = (currentDetailOffsetY + delta).coerceAtLeast(0f)
+        },
+        orientation = Orientation.Vertical,
+        onDragStopped = { velocity ->
+            scope.launch {
+                if (currentDetailOffsetY > dismissThresholdPx || velocity > 600f) {
+                    animate(
+                        initialValue = currentDetailOffsetY,
+                        targetValue = screenHeightPx,
+                        animationSpec = tween(180)
+                    ) { value, _ -> currentDetailOffsetY = value }
+                    showCaseDetailDialog = null
+                    currentDetailOffsetY = 0f
+                } else {
+                    animate(
+                        initialValue = currentDetailOffsetY,
+                        targetValue = 0f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    ) { value, _ -> currentDetailOffsetY = value }
+                }
+            }
+        }
+    )
+
+    val detailNestedScrollConnection = remember(screenHeightPx, dismissThresholdPx) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta < 0f && currentDetailOffsetY > 0f) {
+                    val consumed = delta.coerceAtLeast(-currentDetailOffsetY)
+                    currentDetailOffsetY += consumed
+                    return Offset(0f, consumed)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta > 0f) {
+                    currentDetailOffsetY += delta
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (currentDetailOffsetY > 0f) {
+                    if (currentDetailOffsetY > dismissThresholdPx || available.y > 600f) {
+                        animate(
+                            initialValue = currentDetailOffsetY,
+                            targetValue = screenHeightPx,
+                            animationSpec = tween(180)
+                        ) { value, _ -> currentDetailOffsetY = value }
+                        showCaseDetailDialog = null
+                        currentDetailOffsetY = 0f
+                    } else {
+                        animate(
+                            initialValue = currentDetailOffsetY,
+                            targetValue = 0f,
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        ) { value, _ -> currentDetailOffsetY = value }
+                    }
+                    return available
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (available.y > 600f) {
+                    animate(
+                        initialValue = currentDetailOffsetY,
+                        targetValue = screenHeightPx,
+                        animationSpec = tween(180)
+                    ) { value, _ -> currentDetailOffsetY = value }
+                    showCaseDetailDialog = null
+                    currentDetailOffsetY = 0f
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
 
     // Intent launcher for SAF tree directory selection
     val dirLauncher = rememberLauncherForActivityResult(
@@ -183,7 +305,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             drawerContent = {
                 ModalDrawerSheet(
                     modifier = Modifier.width(320.dp),
-                    drawerContainerColor = BackgroundColor
+                    drawerContainerColor = Color(0xFF090E17)
                 ) {
                     SideDrawerContent(
                         cases = casesState.value,
@@ -215,95 +337,22 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                             showPurgeConfirmation = true
                             purgeConfirmationInput = ""
                             scope.launch { drawerState.close() }
+                        },
+                        tasks = tasksState.value,
+                        onOpenTasks = {
+                            scope.launch { drawerState.close() }
+                            showTasksScreen = true
+                        },
+                        onCloseDrawer = {
+                            scope.launch { drawerState.close() }
                         }
                     )
                 }
             }
         ) {
-            Scaffold(
-                topBar = {
-                    if (showCaseDetailDialog != null) {
-                        val detailCase = showCaseDetailDialog!!
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { showCaseDetailDialog = null }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back to List",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(4.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Case Details",
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 20.sp
-                                    ),
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Cachar DLSA Registry",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Normal
-                                    ),
-                                    color = TextSecondary
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    caseToEdit = detailCase
-                                    showCaseDetailDialog = null
-                                    showAddEditDialog = true
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Edit,
-                                    contentDescription = "Edit Case",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    val tsvText = exportToTsv(listOf(detailCase))
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Cachar DLSA Case TSV Export", tsvText)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Case TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
-
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_SUBJECT, "Cachar DLSA Case Detail Export")
-                                        putExtra(Intent.EXTRA_TEXT, tsvText)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share Case Record"))
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Share Case",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    } else {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Scaffold(
+                    topBar = {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -311,7 +360,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Left Button (Menu or Back)
+                            // Left Button (Menu)
                             Surface(
                                 onClick = {
                                     scope.launch {
@@ -360,119 +409,57 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                 )
                             }
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Selection mode button
-                                if (casesState.value.isNotEmpty()) {
-                                    Surface(
-                                        onClick = {
-                                            isSelectionMode = !isSelectionMode
-                                            if (!isSelectionMode) {
-                                                selectedCases = emptySet()
-                                            }
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = SecondarySurfaceColor,
-                                        border = BorderStroke(1.dp, DividerColor),
-                                        modifier = Modifier.size(44.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = if (isSelectionMode) Icons.Default.Close else Icons.Default.EditCalendar,
-                                                contentDescription = "Toggle Selection Mode",
-                                                tint = TextPrimary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Export / Share button
-                                if (casesState.value.isNotEmpty()) {
-                                    Surface(
-                                        onClick = {
-                                            val tsvText = exportToTsv(casesState.value)
-                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            val clip = ClipData.newPlainText("Cachar DLSA Case TSV Export", tsvText)
-                                            clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
-
-                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(Intent.EXTRA_SUBJECT, "Cachar DLSA Case Registry Export")
-                                                putExtra(Intent.EXTRA_TEXT, tsvText)
-                                            }
-                                            context.startActivity(Intent.createChooser(shareIntent, "Share Case Records (TSV)"))
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = SecondarySurfaceColor,
-                                        border = BorderStroke(1.dp, DividerColor),
-                                        modifier = Modifier.size(44.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.Share,
-                                                contentDescription = "Export and Share Database",
-                                                tint = TextPrimary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Delete selected button
-                                if (isSelectionMode && selectedCases.isNotEmpty()) {
-                                    Surface(
-                                        onClick = {
-                                            showMultiDeleteConfirmation = true
-                                            multiDeleteConfirmationInput = ""
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                                        modifier = Modifier.size(44.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Delete Selected Records",
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                            // Delete selected button
+                            if (isSelectionMode && selectedCases.isNotEmpty()) {
+                                Surface(
+                                    onClick = {
+                                        showMultiDeleteConfirmation = true
+                                        multiDeleteConfirmationInput = ""
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete Selected Records",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                 }
                             }
                         }
-                    }
-                },
-                floatingActionButton = {
-                    Box(
-                        modifier = Modifier
-                            .size(60.dp)
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                    colors = listOf(PrimaryBlue, Color(0xFF635BFF))
-                                ),
-                                shape = RoundedCornerShape(20.dp)
-                            )
-                            .clickable {
-                                caseToEdit = null
-                                showAddEditDialog = true
+                    },
+                    floatingActionButton = {
+                        if (showCaseDetailDialog == null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                            colors = listOf(PrimaryBlue, Color(0xFF635BFF))
+                                        ),
+                                        shape = RoundedCornerShape(20.dp)
+                                    )
+                                    .clickable {
+                                        caseToEdit = null
+                                        showAddEditDialog = true
+                                    }
+                                    .testTag("add_case_button"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Register New Case",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
-                            .testTag("add_case_button"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Register New Case",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        }
                     }
-                }
             ) { innerPadding ->
                 Box(
                     modifier = Modifier
@@ -700,81 +687,271 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                 }
                             }
                         }
+                    }
+                }
 
-                        // 2. The Case Detail View (overlaying on top with slide-in from bottom animation)
-                        AnimatedVisibility(
-                            visible = showCaseDetailDialog != null,
-                            enter = slideInVertically(
-                                initialOffsetY = { it },
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
-                            ) + fadeIn(animationSpec = tween(300)),
-                            exit = slideOutVertically(
-                                targetOffsetY = { it },
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMedium
-                                )
-                            ) + fadeOut(animationSpec = tween(250)),
-                            modifier = Modifier.fillMaxSize()
+                // 2. The Case Detail View (overlaying full screen, slide down to minimize)
+                AnimatedVisibility(
+                    visible = showCaseDetailDialog != null,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(animationSpec = tween(300)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    ) + fadeOut(animationSpec = tween(250)),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val detailCase = showCaseDetailDialog
+                    if (detailCase != null) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .offset { IntOffset(0, currentDetailOffsetY.roundToInt()) }
+                                .nestedScroll(detailNestedScrollConnection)
+                                .background(MaterialTheme.colorScheme.background)
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
                         ) {
-                            val detailCase = showCaseDetailDialog
-                            if (detailCase != null) {
-                                Column(
+                            BackHandler(enabled = true) {
+                                showCaseDetailDialog = null
+                            }
+
+                            // 1. Drag handle (Slide down indicator)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(detailHeaderDragModifier)
+                                    .padding(top = 10.dp, bottom = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.background)
+                                        .width(44.dp)
+                                        .height(5.dp)
+                                        .background(
+                                            color = DividerColor.copy(alpha = 0.9f),
+                                            shape = RoundedCornerShape(2.5.dp)
+                                        )
+                                )
+                            }
+
+                            var showDetailMoreMenu by remember { mutableStateOf(false) }
+
+                            // 2. Case Details Top Bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(detailHeaderDragModifier)
+                                    .padding(start = 8.dp, end = 12.dp, top = 2.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { showCaseDetailDialog = null }
                                 ) {
-                                    BackHandler(enabled = true) {
-                                        showCaseDetailDialog = null
-                                    }
-                                    CaseDetailContent(
-                                        case = detailCase,
-                                        onDismiss = { showCaseDetailDialog = null },
-                                        onEdit = {
-                                            caseToEdit = detailCase
-                                            showCaseDetailDialog = null
-                                            showAddEditDialog = true
-                                        },
-                                        onDelete = {
-                                            viewModel.deleteCaseRecord(detailCase) { deleted ->
-                                                showCaseDetailDialog = null
-                                                if (deleted) {
-                                                    Toast.makeText(context, "Case deleted successfully", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "Failed to delete case file", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        },
-                                        onStatusChange = { newStatus ->
-                                            val updatedCase = detailCase.copy(status = newStatus)
-                                            viewModel.saveCaseRecord(updatedCase) { success, msg ->
-                                                if (success) {
-                                                    showCaseDetailDialog = updatedCase
-                                                    Toast.makeText(context, "Status updated to $newStatus", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "Failed to update status: $msg", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        },
-                                        onNextDateChange = { newNextDate ->
-                                            val updatedCase = detailCase.copy(nextDate = newNextDate)
-                                            viewModel.saveCaseRecord(updatedCase) { success, msg ->
-                                                if (success) {
-                                                    showCaseDetailDialog = updatedCase
-                                                    Toast.makeText(context, "Next date updated to ${formatToDisplayImage(newNextDate)}", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "Failed to update next date: $msg", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxSize()
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Minimize Case",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Case Details",
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 20.sp
+                                        ),
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Cachar DLSA Registry • Slide down to minimize",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Normal
+                                        ),
+                                        color = TextSecondary
+                                    )
+                                }
+
+                                Box {
+                                    IconButton(
+                                        onClick = { showDetailMoreMenu = true }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = "More Options",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showDetailMoreMenu,
+                                        onDismissRequest = { showDetailMoreMenu = false },
+                                        modifier = Modifier
+                                            .background(SurfaceCardColor)
+                                            .border(1.dp, DividerColor, RoundedCornerShape(12.dp))
+                                    ) {
+                                        DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Edit,
+                                                    contentDescription = null,
+                                                    tint = PrimaryBlue,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            },
+                                            text = { Text("Edit Case Record", color = Color.White, fontSize = 13.sp) },
+                                            onClick = {
+                                                showDetailMoreMenu = false
+                                                caseToEdit = detailCase
+                                                showCaseDetailDialog = null
+                                                showAddEditDialog = true
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = null,
+                                                    tint = ErrorRed,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            },
+                                            text = { Text("Delete Case Record", color = ErrorRed, fontSize = 13.sp) },
+                                            onClick = {
+                                                showDetailMoreMenu = false
+                                                viewModel.deleteCaseRecord(detailCase) { deleted ->
+                                                    showCaseDetailDialog = null
+                                                    if (deleted) {
+                                                        Toast.makeText(context, "Case deleted successfully", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "Failed to delete case file", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Default.ContentCopy,
+                                                    contentDescription = null,
+                                                    tint = TextSecondary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            },
+                                            text = { Text("Copy TSV Data", color = Color.White, fontSize = 13.sp) },
+                                            onClick = {
+                                                showDetailMoreMenu = false
+                                                val tsvText = """
+                                                    Case Number	Year	Category	Court	Petitioner	Respondent	Status
+                                                    ${detailCase.caseNumber}	${detailCase.year}	${detailCase.category}	${detailCase.courtReferredFrom}	${detailCase.petitioner}	${detailCase.respondent}	${detailCase.status}
+                                                """.trimIndent()
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                val clip = ClipData.newPlainText("Case TSV", tsvText)
+                                                clipboard.setPrimaryClip(clip)
+                                                Toast.makeText(context, "TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Default.Share,
+                                                    contentDescription = null,
+                                                    tint = TextSecondary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            },
+                                            text = { Text("Share Case Summary", color = Color.White, fontSize = 13.sp) },
+                                            onClick = {
+                                                showDetailMoreMenu = false
+                                                val shareText = "Case: ${detailCase.caseNumber}/${detailCase.year} (${detailCase.category})\nCourt: ${detailCase.courtReferredFrom}\nMediator: ${detailCase.mediator}\nPetitioner: ${detailCase.petitioner}\nRespondent: ${detailCase.respondent}\nStatus: ${detailCase.status}"
+                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                                }
+                                                context.startActivity(Intent.createChooser(shareIntent, "Share Case Details"))
+                                            }
+                                        )
+                                    }
+                                }
                             }
+
+                            HorizontalDivider(
+                                color = DividerColor,
+                                thickness = 1.dp
+                            )
+
+                            // 3. Scrollable Detail Content
+                            CaseDetailContent(
+                                case = detailCase,
+                                onDismiss = { showCaseDetailDialog = null },
+                                onEdit = {
+                                    caseToEdit = detailCase
+                                    showCaseDetailDialog = null
+                                    showAddEditDialog = true
+                                },
+                                onDelete = {
+                                    viewModel.deleteCaseRecord(detailCase) { deleted ->
+                                        showCaseDetailDialog = null
+                                        if (deleted) {
+                                            Toast.makeText(context, "Case deleted successfully", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed to delete case file", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onStatusChange = { newStatus ->
+                                    val updatedCase = detailCase.copy(status = newStatus)
+                                    viewModel.saveCaseRecord(updatedCase) { success, msg ->
+                                        if (success) {
+                                            showCaseDetailDialog = updatedCase
+                                            Toast.makeText(context, "Status updated to $newStatus", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed to update status: $msg", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onNextDateChange = { newNextDate ->
+                                    val updatedCase = detailCase.copy(nextDate = newNextDate)
+                                    viewModel.saveCaseRecord(updatedCase) { success, msg ->
+                                        if (success) {
+                                            showCaseDetailDialog = updatedCase
+                                            Toast.makeText(context, "Next date updated to ${formatToDisplayImage(newNextDate)}", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed to update next date: $msg", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onOpenMoreOptions = { showDetailMoreMenu = true },
+                                tasks = tasksState.value.filter { it.caseNumber == detailCase.caseNumber },
+                                onAddTask = { note ->
+                                    viewModel.addTask(detailCase, note) {
+                                        Toast.makeText(context, "Task created for Case ${detailCase.caseNumber}!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onToggleTask = { taskId ->
+                                    viewModel.toggleTask(taskId)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            )
                         }
+                    }
                 }
             }
         }
@@ -944,6 +1121,21 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             }
         )
     }
+
+    // Tasks and Notes Screen
+    if (showTasksScreen) {
+        TasksScreen(
+            tasks = tasksState.value,
+            onToggleTask = { viewModel.toggleTask(it) },
+            onDeleteTask = { viewModel.deleteTask(it) },
+            onAddTask = { note ->
+                viewModel.addTask(null, note) {
+                    Toast.makeText(context, "Task created!", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onBack = { showTasksScreen = false }
+        )
+    }
 }
 
 // Custom Drawer Item to support exquisite high-fidelity design
@@ -958,16 +1150,8 @@ fun CustomDrawerItem(
     modifier: Modifier = Modifier
 ) {
     val backgroundColor by animateColorAsState(
-        targetValue = if (selected) PrimaryBlue.copy(alpha = 0.08f) else Color.Transparent,
+        targetValue = if (selected) Color(0xFF132238) else Color.Transparent,
         label = "BgColor"
-    )
-    val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 3.dp else 0.dp,
-        label = "IndicatorWidth"
-    )
-    val startPadding by animateDpAsState(
-        targetValue = if (selected) 16.dp else 12.dp,
-        label = "StartPadding"
     )
 
     Surface(
@@ -977,75 +1161,61 @@ fun CustomDrawerItem(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 2.dp)
-            .height(48.dp)
+            .height(46.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (selected || indicatorWidth > 0.dp) {
-                // High contrast left indicator bar
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Box(
+                modifier = Modifier.size(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                icon()
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Label Text
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 14.sp
+                ),
+                color = Color.White,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Optional Badge Count
+            if (badge != null) {
                 Box(
                     modifier = Modifier
-                        .width(indicatorWidth)
-                        .height(24.dp)
-                        .background(PrimaryBlue, shape = RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
-                        .align(Alignment.CenterStart)
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = startPadding, end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Icon
-                Box(
-                    modifier = Modifier.size(24.dp),
-                    contentAlignment = Alignment.Center
+                        .background(Color(0xFF152238), shape = androidx.compose.foundation.shape.CircleShape)
+                        .padding(horizontal = 10.dp, vertical = 2.dp)
                 ) {
-                    icon()
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Label Text
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        fontSize = 14.sp
-                    ),
-                    color = if (selected) PrimaryBlue else TextPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Optional Badge Count
-                if (badge != null) {
-                    Box(
-                        modifier = Modifier
-                            .background(SecondarySurfaceColor, shape = RoundedCornerShape(8.dp))
-                            .border(1.dp, DividerColor, shape = RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = badge,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            ),
-                            color = TextSecondary
-                        )
-                    }
-                }
-
-                // Optional Arrow chevron
-                if (showArrow) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = TextMuted,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        ),
+                        color = Color(0xFF94A3B8)
                     )
                 }
+            }
+
+            // Optional Arrow chevron
+            if (showArrow) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color(0xFF64748B),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
@@ -1063,220 +1233,325 @@ fun SideDrawerContent(
     onRefresh: () -> Unit,
     expandedYears: Set<String>,
     onToggleYear: (String) -> Unit,
-    onTriggerPurge: () -> Unit
+    onTriggerPurge: () -> Unit,
+    tasks: List<TaskItem> = emptyList(),
+    onOpenTasks: () -> Unit = {},
+    onCloseDrawer: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val darkDrawerBg = Color(0xFF090E17)
+    val darkCardBg = Color(0xFF132238)
+    val mutedText = Color(0xFF64748B)
+    val subTextColor = Color(0xFF94A3B8)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundColor)
+            .background(darkDrawerBg)
     ) {
-        // 1. DLSA / Mediation Centre Header
-        Column(
+        // 1. TOP HEADER SECTION
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 20.dp, start = 24.dp, end = 24.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .background(SecondarySurfaceColor, shape = RoundedCornerShape(14.dp))
-                    .border(1.dp, DividerColor, shape = RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Balance,
-                    contentDescription = "Scales of Justice Logo",
-                    tint = PrimaryBlue,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "District Legal Services\nAuthority",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    lineHeight = 22.sp,
-                    letterSpacing = 0.5.sp
-                ),
-                color = TextPrimary
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "Mediation Centre, Cachar",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp
-                ),
-                color = TextSecondary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Case Records Registry",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Light,
-                    fontSize = 12.sp
-                ),
-                color = TextMuted
-            )
-        }
-
-        // 2. Active Registry Folder Card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .background(SurfaceCardColor, shape = RoundedCornerShape(16.dp))
-                .border(1.dp, DividerColor, shape = RoundedCornerShape(16.dp))
-                .padding(14.dp)
+                .padding(top = 40.dp, start = 20.dp, end = 20.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1f)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(SecondarySurfaceColor, shape = RoundedCornerShape(8.dp))
-                            .border(1.dp, DividerColor, shape = RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = "Active Folder Icon",
-                            tint = PrimaryBlue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Linked Registry Folder",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = TextPrimary
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        val friendlyPath = directoryUri?.substringAfterLast("%3A")?.replace("%2F", "/") ?: "None"
-                        Text(
-                            text = "Path: $friendlyPath",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = onRefresh,
+                // Left Scales of Justice Icon Box
+                Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(SecondarySurfaceColor, shape = RoundedCornerShape(8.dp))
-                        .border(1.dp, DividerColor, shape = RoundedCornerShape(8.dp))
+                        .size(48.dp)
+                        .background(darkCardBg, shape = RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = "Reload Files",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(14.dp)
+                        imageVector = Icons.Default.Balance,
+                        contentDescription = "DLSA Logo",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "DLSA Cachar",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 17.sp
+                            ),
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Verified Badge",
+                            tint = Color(0xFF3B82F6),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Mediation Centre, Cachar",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 12.sp
+                        ),
+                        color = subTextColor
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Case Records Registry",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 11.sp
+                        ),
+                        color = mutedText
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = onClearDirectory,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, DividerColor),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = TextSecondary
-                ),
+
+            // Upward collapse button on top right
+            IconButton(
+                onClick = onCloseDrawer,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp),
-                contentPadding = PaddingValues(0.dp)
+                    .size(36.dp)
+                    .background(darkCardBg, shape = RoundedCornerShape(10.dp))
             ) {
                 Icon(
-                    imageVector = Icons.Default.LinkOff,
-                    contentDescription = null,
-                    tint = TextSecondary,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Detach Folder",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                    color = TextSecondary
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Collapse Drawer",
+                    tint = subTextColor,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // 3. Scrollable Tree & Filters List
+        // 2. SCROLLABLE MIDDLE CONTENT (OVERVIEW, TOOLS, DIRECTORIES)
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 4.dp)
         ) {
-            // All Cases Shortcut
+            // --- SECTION 1: OVERVIEW ---
+            Text(
+                text = "OVERVIEW",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    fontSize = 11.sp
+                ),
+                color = mutedText,
+                modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
+            )
+
+            // All Cases
+            val allCasesCount = cases.size
             CustomDrawerItem(
-                label = "All Cases Registry (${cases.size})",
+                label = "All Cases",
                 selected = currentFilter is Filter.All,
                 onClick = { onFilterSelected(Filter.All) },
                 icon = {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Default.List,
+                        imageVector = Icons.Outlined.Description,
                         contentDescription = null,
-                        tint = if (currentFilter is Filter.All) PrimaryBlue else TextSecondary,
+                        tint = subTextColor,
                         modifier = Modifier.size(20.dp)
                     )
-                }
+                },
+                badge = allCasesCount.toString(),
+                showArrow = true
+            )
+
+            // Settled
+            val settledCount = cases.count { it.status.equals("Settled", ignoreCase = true) }
+            CustomDrawerItem(
+                label = "Settled",
+                selected = currentFilter is Filter.Status && currentFilter.status.equals("Settled", ignoreCase = true),
+                onClick = { onFilterSelected(Filter.Status("Settled")) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF10B981), // Bright Green
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                badge = settledCount.toString(),
+                showArrow = true
+            )
+
+            // Not Settled
+            val notSettledCount = cases.count { it.status.equals("Not Settled", ignoreCase = true) }
+            CustomDrawerItem(
+                label = "Not Settled",
+                selected = currentFilter is Filter.Status && currentFilter.status.equals("Not Settled", ignoreCase = true),
+                onClick = { onFilterSelected(Filter.Status("Not Settled")) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Cancel,
+                        contentDescription = null,
+                        tint = Color(0xFFEF4444), // Bright Red
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                badge = notSettledCount.toString(),
+                showArrow = true
+            )
+
+            // Pending
+            val pendingCount = cases.count { 
+                it.status.equals("Pending", ignoreCase = true) || 
+                it.status.equals("Registered", ignoreCase = true) || 
+                it.status.equals("Mediation 1.0", ignoreCase = true) 
+            }
+            CustomDrawerItem(
+                label = "Pending",
+                selected = currentFilter is Filter.Status && (
+                    currentFilter.status.equals("Registered", ignoreCase = true) || 
+                    currentFilter.status.equals("Pending", ignoreCase = true)
+                ),
+                onClick = { onFilterSelected(Filter.Status("Registered")) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.HourglassEmpty,
+                        contentDescription = null,
+                        tint = Color(0xFF8B5CF6), // Bright Purple
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                badge = pendingCount.toString(),
+                showArrow = true
             )
 
             HorizontalDivider(
-                color = DividerColor,
+                color = Color(0xFF1E293B),
                 thickness = 1.dp,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
             )
 
-            // Dynamic Directories Header
+            // --- SECTION 2: TOOLS ---
             Text(
-                text = "CASE DIRECTORIES",
+                text = "TOOLS",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
+                    letterSpacing = 1.2.sp,
                     fontSize = 11.sp
                 ),
-                color = TextMuted,
+                color = mutedText,
                 modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
             )
 
-            if (folderStructure.isEmpty()) {
-                Text(
-                    text = "No dynamic directories found.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            // Tasks & Notes
+            val pendingTasksCount = tasks.count { !it.isCompleted }
+            CustomDrawerItem(
+                label = "Tasks & Notes",
+                selected = false,
+                onClick = onOpenTasks,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Checklist,
+                        contentDescription = null,
+                        tint = if (pendingTasksCount > 0) WarningOrange else subTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                badge = if (pendingTasksCount > 0) pendingTasksCount.toString() else null,
+                showArrow = true
+            )
+
+            // Calendar
+            CustomDrawerItem(
+                label = "Calendar",
+                selected = false,
+                onClick = {
+                    Toast.makeText(context, "Opening Legal Calendar...", Toast.LENGTH_SHORT).show()
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarToday,
+                        contentDescription = null,
+                        tint = subTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                showArrow = true
+            )
+
+            // Reports
+            CustomDrawerItem(
+                label = "Reports",
+                selected = false,
+                onClick = {
+                    Toast.makeText(context, "Generating Cases Summary Report...", Toast.LENGTH_SHORT).show()
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.BarChart,
+                        contentDescription = null,
+                        tint = subTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                showArrow = true
+            )
+
+            // Templates
+            CustomDrawerItem(
+                label = "Templates",
+                selected = false,
+                onClick = {
+                    Toast.makeText(context, "Opening Legal Document Templates...", Toast.LENGTH_SHORT).show()
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.WorkOutline,
+                        contentDescription = null,
+                        tint = subTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                showArrow = true
+            )
+
+            // --- DYNAMIC FOLDER DIRECTORIES (Preserving folder structure feature) ---
+            if (folderStructure.isNotEmpty()) {
+                HorizontalDivider(
+                    color = Color(0xFF1E293B),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
                 )
-            } else {
+
+                Text(
+                    text = "CASE DIRECTORIES",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp,
+                        fontSize = 11.sp
+                    ),
+                    color = mutedText,
+                    modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
+                )
+
                 folderStructure.forEach { (year, months) ->
                     val isYearExpanded = expandedYears.contains(year)
                     Column {
-                        // Year folder expandable row
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 1.dp)
+                                .padding(horizontal = 12.dp, vertical = 2.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable { onToggleYear(year) }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -1284,7 +1559,7 @@ fun SideDrawerContent(
                             Icon(
                                 imageVector = if (isYearExpanded) Icons.Default.FolderOpen else Icons.Default.Folder,
                                 contentDescription = null,
-                                tint = if (isYearExpanded) PrimaryBlue else TextSecondary,
+                                tint = if (isYearExpanded) PrimaryBlue else subTextColor,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -1294,13 +1569,13 @@ fun SideDrawerContent(
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 ),
-                                color = TextPrimary,
+                                color = Color.White,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
                                 imageVector = if (isYearExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                 contentDescription = null,
-                                tint = TextSecondary,
+                                tint = subTextColor,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -1326,7 +1601,7 @@ fun SideDrawerContent(
                                             Icon(
                                                 imageVector = Icons.Default.CalendarToday,
                                                 contentDescription = null,
-                                                tint = if (isSelectedFolder) PrimaryBlue else TextSecondary,
+                                                tint = if (isSelectedFolder) PrimaryBlue else subTextColor,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                         },
@@ -1339,157 +1614,260 @@ fun SideDrawerContent(
                 }
             }
 
-            HorizontalDivider(
-                color = DividerColor,
-                thickness = 1.dp,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            )
-
-            // Status shortcut Section Header
-            Text(
-                text = "STATUS SHORTCUTS",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    fontSize = 11.sp
-                ),
-                color = TextMuted,
-                modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
-            )
-
-            listOf("Registered", "Settled", "Not Settled", "Mediation 1.0").forEach { statusName ->
-                val isSelectedStatus = currentFilter is Filter.Status && currentFilter.status == statusName
-                val statusColor = getStatusColor(statusName)
-                val statusIcon = when (statusName) {
-                    "Settled" -> Icons.Default.CheckCircle
-                    "Not Settled" -> Icons.Default.Cancel
-                    "Mediation 1.0" -> Icons.Default.Gavel
-                    else -> Icons.Default.HourglassEmpty
+            // Linked Registry Folder option (if folder attached)
+            if (directoryUri != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .background(darkCardBg, shape = RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val friendlyPath = directoryUri.substringAfterLast("%3A").replace("%2F", "/")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = friendlyPath,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = subTextColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(
+                        onClick = onClearDirectory,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LinkOff,
+                            contentDescription = "Detach Folder",
+                            tint = ErrorRed,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
-                val count = cases.count { it.status == statusName }
+            }
+        }
 
-                CustomDrawerItem(
-                    label = statusName,
-                    selected = isSelectedStatus,
-                    onClick = { onFilterSelected(Filter.Status(statusName)) },
-                    icon = {
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .background(statusColor.copy(alpha = 0.12f), shape = androidx.compose.foundation.shape.CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = statusIcon,
-                                contentDescription = null,
-                                tint = statusColor,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                    },
-                    badge = count.toString(),
-                    showArrow = true
+        // 3. TIP OF THE DAY CARD
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .background(
+                    color = Color(0xFF162B54),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .clickable {
+                    Toast.makeText(context, "Tip: Use search & status filters for faster retrieval!", Toast.LENGTH_SHORT).show()
+                }
+                .padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFF0F1B36), shape = RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lightbulb,
+                        contentDescription = "Tip Icon",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Tip of the Day",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        ),
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Keep your case records updated for better tracking.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp
+                        ),
+                        color = subTextColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = subTextColor,
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
 
-        // 4. Bottom Controls (Purge Workspace, Settings, Help)
-        Column(
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // 4. USER PROFILE BAR
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Button(
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ErrorRed.copy(alpha = 0.10f),
-                    contentColor = ErrorRed
-                ),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                // Initial Avatar Circle
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(PrimaryBlue, shape = androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "SA",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        ),
+                        color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Text(
+                        text = "Subhadra Acharyya",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        ),
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Secretary",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 12.sp
+                        ),
+                        color = subTextColor
+                    )
+                }
+            }
+
+            // Logout Button Box
+            IconButton(
                 onClick = onTriggerPurge,
-                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .border(1.dp, ErrorRed.copy(alpha = 0.25f), shape = RoundedCornerShape(12.dp))
-                    .testTag("purge_button_trigger")
+                    .size(38.dp)
+                    .background(darkCardBg, shape = RoundedCornerShape(10.dp))
             ) {
                 Icon(
-                    imageVector = Icons.Default.DeleteForever,
-                    contentDescription = null,
-                    tint = ErrorRed,
+                    imageVector = Icons.AutoMirrored.Outlined.Logout,
+                    contentDescription = "Logout",
+                    tint = subTextColor,
                     modifier = Modifier.size(18.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+            }
+        }
+
+        // 5. FOOTER BAR
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "v2.6.0",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Normal
+                ),
+                color = mutedText
+            )
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(12.dp)
+                    .background(Color(0xFF1E293B))
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable {
+                        Toast.makeText(context, "Dark Mode active", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DarkMode,
+                    contentDescription = null,
+                    tint = subTextColor,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Purge Workspace",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                    text = "Dark Mode",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = subTextColor
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = DividerColor)
-            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(12.dp)
+                    .background(Color(0xFF1E293B))
+            )
 
-            // Settings & Help & Support row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly
+            IconButton(
+                onClick = {
+                    Toast.makeText(context, "Settings coming soon!", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.size(24.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
-                            Toast.makeText(context, "Settings option coming soon!", Toast.LENGTH_SHORT).show()
-                        }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Settings",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = TextSecondary
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(16.dp)
-                        .background(DividerColor)
+                Icon(
+                    imageVector = Icons.Outlined.Settings,
+                    contentDescription = "Settings",
+                    tint = subTextColor,
+                    modifier = Modifier.size(16.dp)
                 )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
-                            Toast.makeText(context, "Help & Support coming soon!", Toast.LENGTH_SHORT).show()
-                        }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.HelpOutline,
-                        contentDescription = "Help & Support",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Help & Support",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = TextSecondary
-                    )
-                }
             }
         }
     }
@@ -1572,7 +1950,7 @@ fun OnboardingScreen(onSelectDirectory: () -> Unit) {
 }
 
 // Case Card representation utilizing modern bento structures
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CaseRecordBentoCard(
     case: CaseRecord,
@@ -1584,7 +1962,8 @@ fun CaseRecordBentoCard(
     onDeleteClick: () -> Unit,
     isDetailView: Boolean = false,
     onStatusChange: ((String) -> Unit)? = null,
-    onNextDateChange: ((String) -> Unit)? = null
+    onNextDateChange: ((String) -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null
 ) {
     val cardBorderWidth by animateDpAsState(
         targetValue = if (isSelected) 2.dp else 1.dp,
@@ -1610,7 +1989,10 @@ fun CaseRecordBentoCard(
                 scaleX = cardScale
                 scaleY = cardScale
             }
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .border(
                 width = cardBorderWidth,
                 color = cardBorderColor,
@@ -1665,7 +2047,7 @@ fun CaseRecordBentoCard(
                         )
                     }
 
-                    // Status Badge (Registered)
+                    // Status Badge (Interactive dropdown when onStatusChange is provided)
                     val statusColor = when (case.status) {
                         "Settled" -> SuccessGreen
                         "Not Settled" -> ErrorRed
@@ -1679,27 +2061,87 @@ fun CaseRecordBentoCard(
                         else -> Color(0xFF2C241E)
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .background(statusBg, shape = RoundedCornerShape(50))
-                            .border(1.dp, statusColor.copy(alpha = 0.25f), shape = RoundedCornerShape(50))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    var statusMenuExpanded by remember { mutableStateOf(false) }
+                    val availableStatuses = listOf("Registered", "Settled", "Not Settled", "Mediation 1.0")
+
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .background(statusBg, shape = RoundedCornerShape(50))
+                                .border(1.dp, statusColor.copy(alpha = 0.25f), shape = RoundedCornerShape(50))
+                                .clip(RoundedCornerShape(50))
+                                .clickable(enabled = onStatusChange != null) {
+                                    statusMenuExpanded = true
+                                }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
-                            Box(
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(statusColor, shape = androidx.compose.foundation.shape.CircleShape)
+                                )
+                                Text(
+                                    text = case.status.ifEmpty { "Registered" },
+                                    color = statusColor,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                )
+                                if (onStatusChange != null) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "Select Status",
+                                        tint = statusColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (onStatusChange != null) {
+                            DropdownMenu(
+                                expanded = statusMenuExpanded,
+                                onDismissRequest = { statusMenuExpanded = false },
                                 modifier = Modifier
-                                    .size(5.dp)
-                                    .background(statusColor, shape = androidx.compose.foundation.shape.CircleShape)
-                            )
-                            Text(
-                                text = case.status,
-                                color = statusColor,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp
-                            )
+                                    .background(SurfaceCardColor)
+                                    .border(1.dp, DividerColor, RoundedCornerShape(12.dp))
+                            ) {
+                                availableStatuses.forEach { opt ->
+                                    val optColor = when (opt) {
+                                        "Settled" -> SuccessGreen
+                                        "Not Settled" -> ErrorRed
+                                        "Registered" -> SuccessGreen
+                                        else -> WarningOrange
+                                    }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .background(optColor, shape = androidx.compose.foundation.shape.CircleShape)
+                                                )
+                                                Text(
+                                                    text = opt,
+                                                    color = if (case.status.equals(opt, ignoreCase = true)) optColor else Color.White,
+                                                    fontWeight = if (case.status.equals(opt, ignoreCase = true)) FontWeight.Bold else FontWeight.Normal,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            statusMenuExpanded = false
+                                            onStatusChange(opt)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -2023,6 +2465,7 @@ fun AddEditCaseDialog(
     }
 
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     // Options definitions
     val categoryOptions = listOf(
@@ -2036,18 +2479,16 @@ fun AddEditCaseDialog(
         "District & Sessions Judge", "Addl CJM", "CJM", "Civil Judge Sr. Div. No. 1",
         "Civil Judge Sr. Div. No. 2", "Civil Judge Jr. Div. No. 1", "Civil Judge Jr. Div. No. 2",
         "Civil Judge Jr. Div. No. 3", "Civil Judge Jr. Div. No. 4", "Civil Judge Jr. Div. No. 5",
-        "JMFC 1", "JMFC 2", "JMFC 3", "JMFC 4", "SDJM S", "SDJM M", "FAMILY COURT", "MACT"
+        "Civil Judge Jr Div, Lakhipur",
+        "JMFC 1", "JMFC 2", "JMFC 3", "JMFC 4", "SDJM S", "SDJM M", "FAMILY COURT", "MACT",
+        "FTC, Cachar"
     )
     val mediatorOptions = listOf(
         "SRI ABDUR ROUF BARBHUIYA", "SRI PANKAJ KANTI DEY", "SRI SAJAL KANTI DEY",
         "SMT SARMISTHA PAUL", "SMT TINKU BAIDYA", "SMT PRATIMA GHOSH",
-        "SMT SEEMA CHAKRABORTY", "SRI NILADRI RAY"
+        "SMT SEEMA CHAKRABORTY", "SRI NILADRI RAY",
+        "Smt. Purnima Bhattacharjee", "Sri. Mohitosh Das"
     )
-
-    var categoryExpanded by remember { mutableStateOf(false) }
-    var yearExpanded by remember { mutableStateOf(false) }
-    var courtExpanded by remember { mutableStateOf(false) }
-    var mediatorExpanded by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -2095,38 +2536,37 @@ fun AddEditCaseDialog(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Case Category (Dropdown)
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                    // Case Category (System Dropdown)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                triggerSystemOptionPicker(
+                                    context = context,
+                                    title = "Select Case Category",
+                                    options = categoryOptions,
+                                    currentValue = category,
+                                    onOptionSelected = { category = it }
+                                )
+                            }
+                    ) {
                         OutlinedTextField(
                             value = category,
                             onValueChange = {},
                             readOnly = true,
+                            enabled = false,
                             label = { Text("Case Category") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown") },
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Category") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("field_category_dropdown")
                         )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable { categoryExpanded = true }
-                        )
-                        DropdownMenu(
-                            expanded = categoryExpanded,
-                            onDismissRequest = { categoryExpanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            categoryOptions.forEach { curCat ->
-                                DropdownMenuItem(
-                                    text = { Text(curCat) },
-                                    onClick = {
-                                        category = curCat
-                                        categoryExpanded = false
-                                    }
-                                )
-                            }
-                        }
                     }
 
                     // Case Number (Unrestricted, editable)
@@ -2134,6 +2574,13 @@ fun AddEditCaseDialog(
                         value = caseNumber,
                         onValueChange = { caseNumber = it },
                         label = { Text("Case Number") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("field_case_number"),
@@ -2141,72 +2588,70 @@ fun AddEditCaseDialog(
                         singleLine = true
                     )
 
-                    // Year (Dropdown - Unrestricted, editable)
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                    // Year (System Dropdown)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                triggerSystemOptionPicker(
+                                    context = context,
+                                    title = "Select Year",
+                                    options = yearOptions,
+                                    currentValue = year,
+                                    onOptionSelected = { year = it }
+                                )
+                            }
+                    ) {
                         OutlinedTextField(
                             value = year,
                             onValueChange = {},
                             readOnly = true,
+                            enabled = false,
                             label = { Text("Year") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown") },
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Year") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("field_year_dropdown")
                         )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable { yearExpanded = true }
-                        )
-                        DropdownMenu(
-                            expanded = yearExpanded,
-                            onDismissRequest = { yearExpanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            yearOptions.forEach { curYr ->
-                                DropdownMenuItem(
-                                    text = { Text(curYr) },
-                                    onClick = {
-                                        year = curYr
-                                        yearExpanded = false
-                                    }
-                                )
-                            }
-                        }
                     }
 
-                    // Court Name (Dropdown)
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                    // Court Name (System Dropdown)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                triggerSystemOptionPicker(
+                                    context = context,
+                                    title = "Select Court Name",
+                                    options = courtOptions,
+                                    currentValue = courtReferredFrom,
+                                    onOptionSelected = { courtReferredFrom = it }
+                                )
+                            }
+                    ) {
                         OutlinedTextField(
                             value = courtReferredFrom,
                             onValueChange = {},
                             readOnly = true,
+                            enabled = false,
                             label = { Text("Court Name") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown") },
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Court") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("field_court_dropdown")
                         )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable { courtExpanded = true }
-                        )
-                        DropdownMenu(
-                            expanded = courtExpanded,
-                            onDismissRequest = { courtExpanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            courtOptions.forEach { curCourt ->
-                                DropdownMenuItem(
-                                    text = { Text(curCourt) },
-                                    onClick = {
-                                        courtReferredFrom = curCourt
-                                        courtExpanded = false
-                                    }
-                                )
-                            }
-                        }
                     }
 
                     // Informant Name
@@ -2214,6 +2659,14 @@ fun AddEditCaseDialog(
                         value = petitioner,
                         onValueChange = { petitioner = it },
                         label = { Text("Informant Name") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("field_petitioner"),
@@ -2226,6 +2679,13 @@ fun AddEditCaseDialog(
                         value = petitionerPhone,
                         onValueChange = { petitionerPhone = it },
                         label = { Text("Informant Phone Number") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Phone,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("field_petitioner_phone"),
@@ -2238,6 +2698,14 @@ fun AddEditCaseDialog(
                         value = respondent,
                         onValueChange = { respondent = it },
                         label = { Text("Respondent Name") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("field_respondent"),
@@ -2250,6 +2718,13 @@ fun AddEditCaseDialog(
                         value = respondentPhone,
                         onValueChange = { respondentPhone = it },
                         label = { Text("Defendant / Respondent Phone Number") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Phone,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { focusManager.clearFocus() }
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("field_respondent_phone"),
@@ -2345,38 +2820,37 @@ fun AddEditCaseDialog(
                         )
                     }
 
-                    // Mediator Name (Dropdown)
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                    // Mediator Name (System Dropdown)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                triggerSystemOptionPicker(
+                                    context = context,
+                                    title = "Select Mediator Name",
+                                    options = mediatorOptions,
+                                    currentValue = mediator,
+                                    onOptionSelected = { mediator = it }
+                                )
+                            }
+                    ) {
                         OutlinedTextField(
                             value = mediator,
                             onValueChange = {},
                             readOnly = true,
+                            enabled = false,
                             label = { Text("Mediator Name") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown") },
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Mediator") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("field_mediator_dropdown")
                         )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable { mediatorExpanded = true }
-                        )
-                        DropdownMenu(
-                            expanded = mediatorExpanded,
-                            onDismissRequest = { mediatorExpanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            mediatorOptions.forEach { curMed ->
-                                DropdownMenuItem(
-                                    text = { Text(curMed) },
-                                    onClick = {
-                                        mediator = curMed
-                                        mediatorExpanded = false
-                                    }
-                                )
-                            }
-                        }
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -2482,6 +2956,10 @@ fun CaseDetailContent(
     onDelete: () -> Unit,
     onStatusChange: (String) -> Unit,
     onNextDateChange: (String) -> Unit,
+    onOpenMoreOptions: () -> Unit = {},
+    tasks: List<TaskItem> = emptyList(),
+    onAddTask: (String) -> Unit = {},
+    onToggleTask: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -2494,7 +2972,7 @@ fun CaseDetailContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. CASE HEADER CARD
+        // 1. CASE HEADER CARD (Top rectangular area with press-and-hold for more options)
         CaseRecordBentoCard(
             case = case,
             isSelected = false,
@@ -2505,146 +2983,11 @@ fun CaseDetailContent(
             onDeleteClick = onDelete,
             isDetailView = true,
             onStatusChange = onStatusChange,
-            onNextDateChange = onNextDateChange
+            onNextDateChange = onNextDateChange,
+            onLongClick = onOpenMoreOptions
         )
 
-        // 2. ACTION BUTTONS ROW (Edit Case, Delete Case, More Actions)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Edit Case
-            Surface(
-                onClick = onEdit,
-                shape = RoundedCornerShape(10.dp),
-                color = SurfaceCardColor,
-                border = BorderStroke(1.dp, DividerColor),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Edit Case",
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Edit Case",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        ),
-                        color = Color.White
-                    )
-                }
-            }
-
-            // Delete Case
-            Surface(
-                onClick = onDelete,
-                shape = RoundedCornerShape(10.dp),
-                color = SurfaceCardColor,
-                border = BorderStroke(1.dp, DividerColor),
-                modifier = Modifier
-                    .weight(1.1f)
-                    .height(40.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Case",
-                        tint = ErrorRed,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Delete Case",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        ),
-                        color = ErrorRed
-                    )
-                }
-            }
-
-            // More Actions
-            var showMoreDropdown by remember { mutableStateOf(false) }
-            Box(
-                modifier = Modifier
-                    .weight(1.1f)
-                    .height(40.dp)
-            ) {
-                Surface(
-                    onClick = { showMoreDropdown = true },
-                    shape = RoundedCornerShape(10.dp),
-                    color = SurfaceCardColor,
-                    border = BorderStroke(1.dp, DividerColor),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreHoriz,
-                            contentDescription = "More Actions",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "More Actions",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            ),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = showMoreDropdown,
-                    onDismissRequest = { showMoreDropdown = false },
-                    modifier = Modifier
-                        .background(SurfaceCardColor)
-                        .border(1.dp, DividerColor, RoundedCornerShape(8.dp))
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Copy TSV data", color = Color.White, fontSize = 12.sp) },
-                        onClick = {
-                            showMoreDropdown = false
-                            val tsvText = """
-                                Case Number	Year	Category	Court	Petitioner	Respondent	Status
-                                ${case.caseNumber}	${case.year}	${case.category}	${case.courtReferredFrom}	${case.petitioner}	${case.respondent}	${case.status}
-                            """.trimIndent()
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val clip = ClipData.newPlainText("Case TSV", tsvText)
-                            clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, "TSV copied to clipboard!", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
-            }
-        }
-
-        // 3. CASE DETAILS SECTION
+        // 2. CASE DETAILS SECTION (Court & Mediator Side-by-Side with small font to fit)
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -2667,114 +3010,76 @@ fun CaseDetailContent(
                 shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Item 1: Court / Jurisdiction
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Court (Left column)
+                    Column(
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color(0xFF1B2E53), shape = RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.HomeWork,
-                                contentDescription = null,
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Court / Jurisdiction",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = TextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = case.courtReferredFrom.ifEmpty { "N/A" },
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                ),
-                                color = Color.White
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
+                        Text(
+                            text = "Court / Jurisdiction",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = case.courtReferredFrom.ifEmpty { "N/A" },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            ),
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
+                    // Vertical Divider
+                    Box(
+                        modifier = Modifier
+                            .height(34.dp)
+                            .width(1.dp)
+                            .background(DividerColor)
+                    )
 
-                    // Item 2: Mediator
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Mediator (Right column)
+                    Column(
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color(0xFF142921), shape = RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = SuccessGreen,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Mediator",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = TextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = case.mediator.ifEmpty { "N/A" },
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                ),
-                                color = Color.White
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
+                        Text(
+                            text = "Mediator",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = case.mediator.ifEmpty { "N/A" },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            ),
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
         }
 
-        // 4. PARTY DETAILS SECTION
+        // 3. PARTY DETAILS SECTION (Side by side name & number, click to dial directly)
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -2801,353 +3106,168 @@ fun CaseDetailContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Row 1: Informant / Petitioner
+                    // Party 1: Petitioner
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color(0xFF1B2E53), shape = RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Informant / Petitioner",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = TextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = case.petitioner.ifEmpty { "N/A" },
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                ),
-                                color = Color.White
-                            )
-                            if (case.petitionerPhone.isNotEmpty() && case.petitionerPhone != "N/A") {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Phone,
-                                        contentDescription = null,
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Text(
-                                        text = case.petitionerPhone,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
-                        }
-                        if (case.petitionerPhone.isNotEmpty() && case.petitionerPhone != "N/A") {
-                            IconButton(
-                                onClick = {
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                if (case.petitionerPhone.isNotBlank() && case.petitionerPhone != "N/A") {
                                     try {
                                         val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${case.petitionerPhone}"))
                                         context.startActivity(dialIntent)
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "Cannot dial ${case.petitionerPhone}", Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(Color(0xFF1B2E53), shape = RoundedCornerShape(50.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Phone,
-                                    contentDescription = "Call Informant",
-                                    tint = PrimaryBlue,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                                } else {
+                                    Toast.makeText(context, "No phone number available for petitioner", Toast.LENGTH_SHORT).show()
+                                }
                             }
+                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Petitioner / Informant",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Text(
+                                text = case.petitioner.ifEmpty { "N/A" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                ),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
+
+                        Text(
+                            text = if (case.petitionerPhone.isNotBlank() && case.petitionerPhone != "N/A") case.petitionerPhone else "No phone",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = if (case.petitionerPhone.isNotBlank() && case.petitionerPhone != "N/A") PrimaryBlue else TextMuted
+                        )
                     }
 
                     HorizontalDivider(color = DividerColor.copy(alpha = 0.5f), thickness = 1.dp)
 
-                    // Row 2: Defendant / Respondent
+                    // Party 2: Respondent
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color(0xFF2C1E14), shape = RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = WarningOrange,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Defendant / Respondent",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = TextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = case.respondent.ifEmpty { "N/A" },
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                ),
-                                color = Color.White
-                            )
-                            if (case.respondentPhone.isNotEmpty() && case.respondentPhone != "N/A") {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Phone,
-                                        contentDescription = null,
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Text(
-                                        text = case.respondentPhone,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
-                        }
-                        if (case.respondentPhone.isNotEmpty() && case.respondentPhone != "N/A") {
-                            IconButton(
-                                onClick = {
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                if (case.respondentPhone.isNotBlank() && case.respondentPhone != "N/A") {
                                     try {
                                         val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${case.respondentPhone}"))
                                         context.startActivity(dialIntent)
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "Cannot dial ${case.respondentPhone}", Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(Color(0xFF2C1E14), shape = RoundedCornerShape(50.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Phone,
-                                    contentDescription = "Call Respondent",
-                                    tint = WarningOrange,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                                } else {
+                                    Toast.makeText(context, "No phone number available for respondent", Toast.LENGTH_SHORT).show()
+                                }
                             }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 5. CASE STATUS SECTION (Interactive dropdown matching approved design)
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = "CASE STATUS",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.5.sp
-                ),
-                color = PrimaryBlue
-            )
-
-            var expandedStatus by remember { mutableStateOf(false) }
-            val statuses = listOf("Registered", "Settled", "Not Settled", "Mediation 1.0")
-
-            val statusColor = when (case.status) {
-                "Settled" -> SuccessGreen
-                "Not Settled" -> ErrorRed
-                "Registered" -> SuccessGreen
-                else -> WarningOrange
-            }
-            val statusBg = when (case.status) {
-                "Settled" -> Color(0xFF0C1912)
-                "Not Settled" -> Color(0xFF1C0D0D)
-                "Registered" -> Color(0xFF0C1912)
-                else -> Color(0xFF1C130D)
-            }
-            val statusBorder = statusColor.copy(alpha = 0.3f)
-            val statusDesc = when (case.status) {
-                "Registered" -> "This case is currently active and registered."
-                "Settled" -> "This case has been successfully settled."
-                "Not Settled" -> "This case was closed as not settled."
-                else -> "This case is currently in ${case.status} state."
-            }
-
-            Box {
-                Surface(
-                    onClick = { expandedStatus = true },
-                    shape = RoundedCornerShape(12.dp),
-                    color = statusBg,
-                    border = BorderStroke(1.dp, statusBorder),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .background(statusColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (case.status == "Not Settled") Icons.Default.Cancel else Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = statusColor,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = case.status,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                ),
-                                color = statusColor
-                            )
-                            Spacer(modifier = Modifier.height(1.dp))
-                            Text(
-                                text = statusDesc,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal
+                                text = "Respondent / Defendant",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Medium
                                 ),
                                 color = TextSecondary
                             )
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Text(
+                                text = case.respondent.ifEmpty { "N/A" },
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                ),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Expand Status",
-                            tint = statusColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
 
-                DropdownMenu(
-                    expanded = expandedStatus,
-                    onDismissRequest = { expandedStatus = false },
-                    modifier = Modifier
-                        .background(SurfaceCardColor)
-                        .border(1.dp, DividerColor, RoundedCornerShape(8.dp))
-                ) {
-                    statuses.forEach { statusOption ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    val optColor = when (statusOption) {
-                                        "Settled" -> SuccessGreen
-                                        "Not Settled" -> ErrorRed
-                                        "Registered" -> SuccessGreen
-                                        else -> WarningOrange
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .background(optColor, RoundedCornerShape(50.dp))
-                                    )
-                                    Text(
-                                        text = statusOption,
-                                        color = if (statusOption == case.status) PrimaryBlue else Color.White,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            },
-                            onClick = {
-                                expandedStatus = false
-                                onStatusChange(statusOption)
-                            }
+                        Text(
+                            text = if (case.respondentPhone.isNotBlank() && case.respondentPhone != "N/A") case.respondentPhone else "No phone",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = if (case.respondentPhone.isNotBlank() && case.respondentPhone != "N/A") WarningOrange else TextMuted
                         )
                     }
                 }
             }
         }
 
-        // 6. NOTES SECTION
+        // 4. NOTES & TASKS SECTION
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = "NOTES",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.5.sp
-                ),
-                color = PrimaryBlue
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "NOTES & TASKS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.5.sp
+                    ),
+                    color = PrimaryBlue
+                )
+                if (tasks.isNotEmpty()) {
+                    Text(
+                        text = "${tasks.count { !it.isCompleted }} pending",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = WarningOrange
+                    )
+                }
+            }
 
             OutlinedTextField(
                 value = noteText,
                 onValueChange = { noteText = it },
                 placeholder = {
                     Text(
-                        text = "Add a note...",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                        text = "e.g., Advocate requested to inform parties, conduct mediation and submit report...",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                         color = TextMuted
                     )
                 },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Outlined.Description,
+                        imageVector = Icons.Outlined.EditNote,
                         contentDescription = "Notes Icon",
                         tint = TextSecondary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(68.dp),
+                    .height(72.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = SurfaceCardColor,
                     unfocusedContainerColor = SurfaceCardColor,
@@ -3159,45 +3279,100 @@ fun CaseDetailContent(
                 shape = RoundedCornerShape(10.dp),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp)
             )
-        }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 7. BOTTOM GRADIENT BUTTON (Add Activity / Update)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .background(
-                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                        colors = listOf(PrimaryBlue, Color(0xFF4361EE))
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .clickable {
-                    Toast.makeText(context, "Activity logged & updated successfully!", Toast.LENGTH_SHORT).show()
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+            // Update / Create Task button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(PrimaryBlue, Color(0xFF4361EE))
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable {
+                        if (noteText.isBlank()) {
+                            Toast.makeText(context, "Please enter a note before updating", Toast.LENGTH_SHORT).show()
+                        } else {
+                            onAddTask(noteText.trim())
+                            noteText = ""
+                        }
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Add Activity / Update",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    ),
-                    color = Color.White
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AddTask,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Update Note & Create Task",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        ),
+                        color = Color.White
+                    )
+                }
+            }
+
+            // Display case tasks list if any
+            if (tasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    tasks.forEach { task ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, DividerColor, RoundedCornerShape(8.dp)),
+                            colors = CardDefaults.cardColors(containerColor = SurfaceCardColor),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = task.isCompleted,
+                                    onCheckedChange = { onToggleTask(task.id) },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = SuccessGreen,
+                                        uncheckedColor = TextSecondary
+                                    ),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = task.note,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                            textDecoration = if (task.isCompleted) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                                        ),
+                                        color = if (task.isCompleted) TextMuted else Color.White
+                                    )
+                                    Text(
+                                        text = task.date,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -3607,6 +3782,25 @@ fun triggerDatePicker(context: Context, onDateSelected: (String) -> Unit) {
         calendar.get(Calendar.DAY_OF_MONTH)
     )
     datePickerDialog.show()
+}
+
+// Dialog helper triggering native Android System Single Choice Selection Dialog
+fun triggerSystemOptionPicker(
+    context: Context,
+    title: String,
+    options: List<String>,
+    currentValue: String,
+    onOptionSelected: (String) -> Unit
+) {
+    val selectedIndex = options.indexOf(currentValue).coerceAtLeast(0)
+    android.app.AlertDialog.Builder(context)
+        .setTitle(title)
+        .setSingleChoiceItems(options.toTypedArray(), selectedIndex) { dialog, which ->
+            onOptionSelected(options[which])
+            dialog.dismiss()
+        }
+        .setNegativeButton("Cancel", null)
+        .show()
 }
 
 // TSV serialization compiler
