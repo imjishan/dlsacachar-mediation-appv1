@@ -996,24 +996,27 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             suggestedSerialNum = viewModel.getNextSerialNumber(),
             onDismiss = { showAddEditDialog = false },
             onSave = { updatedCase ->
-                if (localCaseToEdit != null && (
+                val identityChanged = localCaseToEdit != null && (
                     localCaseToEdit.caseNumber != updatedCase.caseNumber ||
                     localCaseToEdit.year != updatedCase.year ||
                     localCaseToEdit.category != updatedCase.category
-                )) {
-                    viewModel.deleteCaseRecord(localCaseToEdit) { deleted ->
-                        viewModel.saveCaseRecord(updatedCase) { success, message ->
-                            if (success) {
-                                showAddEditDialog = false
-                            }
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } else {
-                    viewModel.saveCaseRecord(updatedCase) { success, message ->
-                        if (success) {
+                )
+
+                // Save the new version first. Only remove the old file after the new file
+                // has been written successfully, so an edit can never erase the only copy.
+                viewModel.saveCaseRecord(updatedCase) { success, message ->
+                    if (success && identityChanged && localCaseToEdit != null) {
+                        viewModel.deleteCaseRecord(localCaseToEdit) { oldRecordDeleted ->
                             showAddEditDialog = false
+                            val finalMessage = if (oldRecordDeleted) {
+                                "Case record updated successfully"
+                            } else {
+                                "Updated record saved, but the previous file could not be removed"
+                            }
+                            Toast.makeText(context, finalMessage, Toast.LENGTH_LONG).show()
                         }
+                    } else {
+                        if (success) showAddEditDialog = false
                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                     }
                 }
