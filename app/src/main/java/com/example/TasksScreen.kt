@@ -108,7 +108,7 @@ fun TasksScreen(
                 onClick = { showAddTaskDialog = true },
                 containerColor = PrimaryBlue,
                 contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -138,7 +138,7 @@ fun TasksScreen(
                     val isSelected = selectedFilter == filterName
                     Surface(
                         onClick = { selectedFilter = filterName },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(50),
                         color = if (isSelected) PrimaryBlue.copy(alpha = 0.2f) else SurfaceCardColor,
                         border = BorderStroke(
                             1.dp,
@@ -174,7 +174,7 @@ fun TasksScreen(
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
-                                .background(SurfaceCardColor, shape = RoundedCornerShape(20.dp)),
+                                .background(SurfaceCardColor, shape = RoundedCornerShape(50)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -222,7 +222,7 @@ fun TasksScreen(
         var manualNote by remember { mutableStateOf("") }
         Dialog(onDismissRequest = { showAddTaskDialog = false }) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = SurfaceCardColor,
                 border = BorderStroke(1.dp, DividerColor),
                 modifier = Modifier
@@ -263,7 +263,7 @@ fun TasksScreen(
                             focusedTextColor = Color.White,
                             unfocusedTextColor = Color.White
                         ),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
 
                     Row(
@@ -304,13 +304,13 @@ fun TaskCardItem(
             .fillMaxWidth()
             .border(
                 1.dp,
-                if (task.isCompleted) DividerColor.copy(alpha = 0.5f) else Color(0xFF1F355C),
-                RoundedCornerShape(12.dp)
+                if (task.isCompleted) DividerColor.copy(alpha = 0.5f) else DividerColor,
+                RoundedCornerShape(18.dp)
             ),
         colors = CardDefaults.cardColors(
             containerColor = if (task.isCompleted) SurfaceCardColor.copy(alpha = 0.6f) else SurfaceCardColor
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(18.dp)
     ) {
         Row(
             modifier = Modifier
@@ -343,7 +343,7 @@ fun TaskCardItem(
                     if (task.caseNumber.isNotEmpty()) {
                         Box(
                             modifier = Modifier
-                                .background(Color(0xFF1B2E53), shape = RoundedCornerShape(4.dp))
+                                .background(SecondarySurfaceColor, shape = RoundedCornerShape(4.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
