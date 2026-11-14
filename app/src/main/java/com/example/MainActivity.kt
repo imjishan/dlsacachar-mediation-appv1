@@ -131,7 +131,7 @@ sealed interface Filter {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainAppScreen(viewModel: CaseViewModel) {
     val context = LocalContext.current
