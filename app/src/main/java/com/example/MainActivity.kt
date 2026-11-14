@@ -1431,7 +1431,7 @@ fun SideDrawerContent(
                         selected = currentFilter is Filter.All,
                         onClick = { onFilterSelected(Filter.All) },
                         icon = {
-                            Icon(Icons.Outlined.List, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Outlined.Description, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
                         },
                         badge = allCasesCount.toString()
                     )
