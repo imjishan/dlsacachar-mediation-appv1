@@ -996,7 +996,11 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             suggestedSerialNum = viewModel.getNextSerialNumber(),
             onDismiss = { showAddEditDialog = false },
             onSave = { updatedCase ->
-                if (localCaseToEdit != null && (localCaseToEdit.caseNumber != updatedCase.caseNumber || localCaseToEdit.year != updatedCase.year)) {
+                if (localCaseToEdit != null && (
+                    localCaseToEdit.caseNumber != updatedCase.caseNumber ||
+                    localCaseToEdit.year != updatedCase.year ||
+                    localCaseToEdit.category != updatedCase.category
+                )) {
                     viewModel.deleteCaseRecord(localCaseToEdit) { deleted ->
                         viewModel.saveCaseRecord(updatedCase) { success, message ->
                             if (success) {
@@ -1375,7 +1379,7 @@ fun SideDrawerContent(
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 4.dp)
         ) {
-            // --- SECTION 1: OVERVIEW ---
+            // --- OVERVIEW: EXPANDABLE CASE FILTERS ---
             Text(
                 text = "OVERVIEW",
                 style = MaterialTheme.typography.labelSmall.copy(
@@ -1387,12 +1391,20 @@ fun SideDrawerContent(
                 modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
             )
 
-            // All Cases
             val allCasesCount = cases.size
+            val settledCount = cases.count { it.status.equals("Settled", ignoreCase = true) }
+            val notSettledCount = cases.count { it.status.equals("Not Settled", ignoreCase = true) }
+            val pendingCount = cases.count {
+                it.status.equals("Pending", ignoreCase = true) ||
+                    it.status.equals("Registered", ignoreCase = true) ||
+                    it.status.equals("Mediation 1.0", ignoreCase = true)
+            }
+            var overviewExpanded by remember { mutableStateOf(true) }
+
             CustomDrawerItem(
-                label = "All Cases",
+                label = "Overview",
                 selected = currentFilter is Filter.All,
-                onClick = { onFilterSelected(Filter.All) },
+                onClick = { overviewExpanded = !overviewExpanded },
                 icon = {
                     Icon(
                         imageVector = Icons.Outlined.Description,
@@ -1405,137 +1417,59 @@ fun SideDrawerContent(
                 showArrow = true
             )
 
-            // Settled
-            val settledCount = cases.count { it.status.equals("Settled", ignoreCase = true) }
-            CustomDrawerItem(
-                label = "Settled",
-                selected = currentFilter is Filter.Status && currentFilter.status.equals("Settled", ignoreCase = true),
-                onClick = { onFilterSelected(Filter.Status("Settled")) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFFB0B0B0), // Bright Green
-                        modifier = Modifier.size(20.dp)
+            AnimatedVisibility(
+                visible = overviewExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.padding(start = 18.dp)) {
+                    CustomDrawerItem(
+                        label = "All Cases",
+                        selected = currentFilter is Filter.All,
+                        onClick = { onFilterSelected(Filter.All) },
+                        icon = {
+                            Icon(Icons.Outlined.List, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
+                        },
+                        badge = allCasesCount.toString()
                     )
-                },
-                badge = settledCount.toString(),
-                showArrow = true
-            )
-
-            // Not Settled
-            val notSettledCount = cases.count { it.status.equals("Not Settled", ignoreCase = true) }
-            CustomDrawerItem(
-                label = "Not Settled",
-                selected = currentFilter is Filter.Status && currentFilter.status.equals("Not Settled", ignoreCase = true),
-                onClick = { onFilterSelected(Filter.Status("Not Settled")) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Cancel,
-                        contentDescription = null,
-                        tint = Color(0xFF8C8C8C), // Bright Red
-                        modifier = Modifier.size(20.dp)
+                    CustomDrawerItem(
+                        label = "Settled",
+                        selected = currentFilter is Filter.Status && currentFilter.status.equals("Settled", ignoreCase = true),
+                        onClick = { onFilterSelected(Filter.Status("Settled")) },
+                        icon = {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
+                        },
+                        badge = settledCount.toString()
                     )
-                },
-                badge = notSettledCount.toString(),
-                showArrow = true
-            )
-
-            // Pending
-            val pendingCount = cases.count { 
-                it.status.equals("Pending", ignoreCase = true) || 
-                it.status.equals("Registered", ignoreCase = true) || 
-                it.status.equals("Mediation 1.0", ignoreCase = true) 
+                    CustomDrawerItem(
+                        label = "Not Settled",
+                        selected = currentFilter is Filter.Status && currentFilter.status.equals("Not Settled", ignoreCase = true),
+                        onClick = { onFilterSelected(Filter.Status("Not Settled")) },
+                        icon = {
+                            Icon(Icons.Default.Cancel, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
+                        },
+                        badge = notSettledCount.toString()
+                    )
+                    CustomDrawerItem(
+                        label = "Pending",
+                        selected = currentFilter is Filter.Status && (
+                            currentFilter.status.equals("Registered", ignoreCase = true) ||
+                                currentFilter.status.equals("Pending", ignoreCase = true) ||
+                                currentFilter.status.equals("Mediation 1.0", ignoreCase = true)
+                            ),
+                        onClick = { onFilterSelected(Filter.Status("Registered")) },
+                        icon = {
+                            Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
+                        },
+                        badge = pendingCount.toString()
+                    )
+                }
             }
-            CustomDrawerItem(
-                label = "Pending",
-                selected = currentFilter is Filter.Status && (
-                    currentFilter.status.equals("Registered", ignoreCase = true) || 
-                    currentFilter.status.equals("Pending", ignoreCase = true)
-                ),
-                onClick = { onFilterSelected(Filter.Status("Registered")) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.HourglassEmpty,
-                        contentDescription = null,
-                        tint = Color(0xFFC0C0C0), // Bright Purple
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                badge = pendingCount.toString(),
-                showArrow = true
-            )
 
             HorizontalDivider(
                 color = Color(0xFF202020),
                 thickness = 1.dp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
-            )
-
-            // --- SECTION 2: TOOLS ---
-            Text(
-                text = "TOOLS",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                    fontSize = 11.sp
-                ),
-                color = mutedText,
-                modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
-            )
-
-            // Calendar
-            CustomDrawerItem(
-                label = "Calendar",
-                selected = false,
-                onClick = {
-                    Toast.makeText(context, "Opening Legal Calendar...", Toast.LENGTH_SHORT).show()
-                },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Outlined.CalendarToday,
-                        contentDescription = null,
-                        tint = subTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                showArrow = true
-            )
-
-            // Reports
-            CustomDrawerItem(
-                label = "Reports",
-                selected = false,
-                onClick = {
-                    Toast.makeText(context, "Generating Cases Summary Report...", Toast.LENGTH_SHORT).show()
-                },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Outlined.BarChart,
-                        contentDescription = null,
-                        tint = subTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                showArrow = true
-            )
-
-            // Templates
-            CustomDrawerItem(
-                label = "Templates",
-                selected = false,
-                onClick = {
-                    Toast.makeText(context, "Opening Legal Document Templates...", Toast.LENGTH_SHORT).show()
-                },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Outlined.WorkOutline,
-                        contentDescription = null,
-                        tint = subTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                showArrow = true
             )
 
             // --- DYNAMIC FOLDER DIRECTORIES (Preserving folder structure feature) ---
@@ -1674,215 +1608,6 @@ fun SideDrawerContent(
             }
         }
 
-        // 3. TIP OF THE DAY CARD
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .background(
-                    color = Color(0xFF303030),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                .clip(RoundedCornerShape(16.dp))
-                .clickable {
-                    Toast.makeText(context, "Tip: Use search & status filters for faster retrieval!", Toast.LENGTH_SHORT).show()
-                }
-                .padding(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(Color(0xFF171717), shape = RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Lightbulb,
-                        contentDescription = "Tip Icon",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = "Tip of the Day",
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        ),
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Keep your case records updated for better tracking.",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 11.sp,
-                            lineHeight = 14.sp
-                        ),
-                        color = subTextColor
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = subTextColor,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 4. USER PROFILE BAR
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                // Initial Avatar Circle
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(PrimaryBlue, shape = androidx.compose.foundation.shape.CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "SA",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        color = Color.White
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = "Subhadra Acharyya",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        ),
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Secretary",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.Normal,
-                            fontSize = 12.sp
-                        ),
-                        color = subTextColor
-                    )
-                }
-            }
-
-            // Logout Button Box
-            IconButton(
-                onClick = onTriggerPurge,
-                modifier = Modifier
-                    .size(38.dp)
-                    .background(darkCardBg, shape = RoundedCornerShape(10.dp))
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Logout,
-                    contentDescription = "Logout",
-                    tint = subTextColor,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-
-        // 5. FOOTER BAR
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "v2.6.0",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Normal
-                ),
-                color = mutedText
-            )
-
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(12.dp)
-                    .background(Color(0xFF202020))
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable {
-                        Toast.makeText(context, "Dark Mode active", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.DarkMode,
-                    contentDescription = null,
-                    tint = subTextColor,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Dark Mode",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = subTextColor
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(12.dp)
-                    .background(Color(0xFF202020))
-            )
-
-            IconButton(
-                onClick = {
-                    Toast.makeText(context, "Settings coming soon!", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Settings,
-                    contentDescription = "Settings",
-                    tint = subTextColor,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
     }
 }
 
@@ -2456,7 +2181,7 @@ fun AddEditCaseDialog(
     var caseNumber by remember { mutableStateOf(caseToEdit?.caseNumber ?: "") }
     var serialNumber by remember { mutableStateOf(caseToEdit?.serialNumber?.toString() ?: suggestedSerialNum.toString()) }
     var category by remember { mutableStateOf(caseToEdit?.category ?: "MDV") }
-    var year by remember { mutableStateOf(caseToEdit?.year ?: "2026") }
+    var year by remember { mutableStateOf(caseToEdit?.year ?: Calendar.getInstance().get(Calendar.YEAR).toString()) }
     var courtReferredFrom by remember { mutableStateOf(caseToEdit?.courtReferredFrom ?: "District & Sessions Judge") }
     var petitioner by remember { mutableStateOf(caseToEdit?.petitioner ?: "") }
     var petitionerPhone by remember { mutableStateOf(caseToEdit?.petitionerPhone ?: "") }
@@ -2485,9 +2210,9 @@ fun AddEditCaseDialog(
         "MDV", "PRC", "NI", "CR", "MAC", "TS", "MS", "CS", "FC", "FC CIVIL", 
         "FC CRL", "FC g/A", "GR", "MR", "DV", "LA", "ME", "ME ABBR", "NI CR"
     )
-    val yearOptions = listOf(
-        "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"
-    )
+    // Scrollable year list: supports historical records and future intake years.
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val yearOptions = (1900..(currentYear + 10)).map { it.toString() }.reversed()
     val courtOptions = listOf(
         "District & Sessions Judge", "Addl CJM", "CJM", "Civil Judge Sr. Div. No. 1",
         "Civil Judge Sr. Div. No. 2", "Civil Judge Jr. Div. No. 1", "Civil Judge Jr. Div. No. 2",
