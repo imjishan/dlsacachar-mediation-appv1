@@ -1484,24 +1484,6 @@ fun SideDrawerContent(
                 modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
             )
 
-            // Tasks & Notes
-            val pendingTasksCount = tasks.count { !it.isCompleted }
-            CustomDrawerItem(
-                label = "Tasks & Notes",
-                selected = false,
-                onClick = onOpenTasks,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Checklist,
-                        contentDescription = null,
-                        tint = if (pendingTasksCount > 0) WarningOrange else subTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                badge = if (pendingTasksCount > 0) pendingTasksCount.toString() else null,
-                showArrow = true
-            )
-
             // Calendar
             CustomDrawerItem(
                 label = "Calendar",
