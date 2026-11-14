@@ -103,17 +103,47 @@ fun TasksScreen(
                 )
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddTaskDialog = true },
-                containerColor = PrimaryBlue,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(24.dp)
+        bottomBar = {
+            Surface(
+                color = BackgroundColor,
+                tonalElevation = 8.dp,
+                border = BorderStroke(1.dp, DividerColor)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Create Task"
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 22.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f).clickable(onClick = onBack),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.Description, contentDescription = "Cases", tint = TextMuted, modifier = Modifier.size(22.dp))
+                        Text("Cases", color = TextMuted, fontSize = 11.sp)
+                    }
+                    Surface(
+                        onClick = { showAddTaskDialog = true },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = TextPrimary,
+                        modifier = Modifier.size(50.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Add, contentDescription = "Create Task", tint = BackgroundColor, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.Checklist, contentDescription = "Tasks", tint = TextPrimary, modifier = Modifier.size(22.dp))
+                        Text("Tasks", color = TextPrimary, fontSize = 11.sp)
+                    }
+                }
             }
         }
     ) { innerPadding ->
