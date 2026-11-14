@@ -481,10 +481,15 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                         }
                                     }
                                 }
-                                Row(
-                                    Modifier.fillMaxWidth().height(76.dp).clip(RoundedCornerShape(40.dp))
-                                        .background(Color(0xFF171717)).border(1.dp, Color(0xFF292929), RoundedCornerShape(40.dp))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        modifier = Modifier.weight(1f).height(76.dp),
+                                        color = Color(0xFF171717),
+                                        shape = RoundedCornerShape(40.dp),
+                                        border = BorderStroke(1.dp, Color(0xFF292929))
+                                    ) {
+                                  Row(
+                                    Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceEvenly
                                 ) {
@@ -501,25 +506,30 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(icon, description, tint = if (active) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(27.dp))
-                                        }
+                                          }
+                                }
                                     }
                                     NavIcon(0, Icons.Outlined.Home, "Dashboard")
                                     NavIcon(1, Icons.Outlined.Inbox, "All Cases")
                                     NavIcon(2, Icons.Outlined.NotificationsNone, "Future page")
                                     NavIcon(3, Icons.Outlined.Layers, "Future page")
                                 }
-                                Spacer(Modifier.height(8.dp))
-                                Surface(
-                                    onClick = { selectedTab = 1; caseFiltersExpanded = false; caseToEdit = null; showAddEditDialog = true },
-                                    shape = androidx.compose.foundation.shape.CircleShape,
-                                    color = Color(0xFF171717),
-                                    border = BorderStroke(1.dp, Color(0xFF292929)),
-                                    modifier = Modifier.size(62.dp).testTag("add_case_button")
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.Add, "Register New Case", tint = Color.White, modifier = Modifier.size(32.dp))
+
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Surface(
+                                        onClick = { selectedTab = 1; caseFiltersExpanded = false; caseToEdit = null; showAddEditDialog = true },
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = Color(0xFF171717),
+                                        border = BorderStroke(1.dp, Color(0xFF292929)),
+                                        modifier = Modifier.size(62.dp).testTag("add_case_button")
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Add, "Register New Case", tint = Color.White, modifier = Modifier.size(32.dp))
+                                        }
                                     }
                                 }
+
                             }
                         }
                     },
