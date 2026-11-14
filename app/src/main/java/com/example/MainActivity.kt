@@ -709,7 +709,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    items(filteredCases, key = { it.caseNumber }) { case ->
+                                    items(filteredCases, key = { "${it.category}_${it.caseNumber}_${it.year}_${it.serialNumber}" }) { case ->
                                         CaseRecordBentoCard(
                                             case = case,
                                             isSelected = selectedCases.contains(case),
