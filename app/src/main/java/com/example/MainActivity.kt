@@ -144,6 +144,8 @@ fun MainAppScreen(viewModel: CaseViewModel) {
     var searchText by remember { mutableStateOf("") }
     var showAddEditDialog by remember { mutableStateOf(false) }
     var showTasksScreen by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var caseFiltersExpanded by remember { mutableStateOf(false) }
     var caseToEdit by remember { mutableStateOf<CaseRecord?>(null) }
     
     // State of selected cases for multi-delete
@@ -313,6 +315,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                         currentFilter = currentFilter,
                         directoryUri = directoryUriState.value,
                         onFilterSelected = { filter ->
+                            selectedTab = 1
                             currentFilter = filter
                             searchText = "" // Reset search when clicking filters
                             isSelectionMode = false
@@ -433,64 +436,93 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                             }
                         }
                     },
+
                     bottomBar = {
                         if (showCaseDetailDialog == null) {
-                            Surface(
-                                color = BackgroundColor,
-                                tonalElevation = 8.dp,
-                                border = BorderStroke(1.dp, DividerColor)
+                            Column(
+                                Modifier.fillMaxWidth().background(BackgroundColor).navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .navigationBarsPadding()
-                                        .padding(horizontal = 22.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceAround,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f).clickable { showTasksScreen = false },
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Description,
-                                            contentDescription = "Cases",
-                                            tint = if (!showTasksScreen) TextPrimary else TextMuted,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                        Text("Cases", color = if (!showTasksScreen) TextPrimary else TextMuted, fontSize = 11.sp)
-                                    }
+                                AnimatedVisibility(visible = caseFiltersExpanded && selectedTab == 1, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                                     Surface(
-                                        onClick = {
-                                            caseToEdit = null
-                                            showAddEditDialog = true
-                                        },
-                                        shape = androidx.compose.foundation.shape.CircleShape,
-                                        color = TextPrimary,
-                                        modifier = Modifier.size(50.dp).testTag("add_case_button")
+                                        color = Color(0xFF0B0B0B),
+                                        shape = RoundedCornerShape(28.dp),
+                                        border = BorderStroke(1.dp, Color(0xFF292929)),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Add, contentDescription = "Register New Case", tint = BackgroundColor, modifier = Modifier.size(26.dp))
+                                        Column(Modifier.padding(8.dp)) {
+                                            val labels = listOf("Registered Cases", "Settled Cases", "Not Settled Cases")
+                                            val icons = listOf(Icons.Outlined.Apps, Icons.Outlined.CheckCircle, Icons.Outlined.Cancel)
+                                            val filters = listOf<Filter>(Filter.All, Filter.Status("Settled"), Filter.Status("Not Settled"))
+                                            labels.forEachIndexed { index, label ->
+                                                val active = when (val f = currentFilter) {
+                                                    is Filter.All -> index == 0
+                                                    is Filter.Status -> (index == 1 && f.status.equals("Settled", true)) || (index == 2 && f.status.equals("Not Settled", true))
+                                                    else -> false
+                                                }
+                                                val count = when (index) {
+                                                    0 -> casesState.value.size
+                                                    1 -> casesState.value.count { it.status.equals("Settled", true) }
+                                                    else -> casesState.value.count { it.status.equals("Not Settled", true) }
+                                                }
+                                                Row(
+                                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                                                        .background(if (active) Color(0xFF252525) else Color.Transparent)
+                                                        .clickable { currentFilter = filters[index]; searchText = ""; caseFiltersExpanded = false }
+                                                        .padding(horizontal = 16.dp, vertical = 15.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(icons[index], null, tint = if (active) TextPrimary else TextMuted, modifier = Modifier.size(22.dp))
+                                                    Spacer(Modifier.width(14.dp))
+                                                    Text(label, color = if (active) TextPrimary else TextSecondary, modifier = Modifier.weight(1f), fontSize = 15.sp)
+                                                    Text(count.toString(), color = TextMuted, fontSize = 14.sp)
+                                                }
+                                            }
                                         }
                                     }
-                                    Column(
-                                        modifier = Modifier.weight(1f).clickable { showTasksScreen = true },
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Checklist,
-                                            contentDescription = "Tasks",
-                                            tint = if (showTasksScreen) TextPrimary else TextMuted,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                        Text("Tasks", color = if (showTasksScreen) TextPrimary else TextMuted, fontSize = 11.sp)
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth().height(76.dp).clip(RoundedCornerShape(40.dp))
+                                        .background(Color(0xFF171717)).border(1.dp, Color(0xFF292929), RoundedCornerShape(40.dp))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    @Composable
+                                    fun NavIcon(index: Int, icon: ImageVector, description: String) {
+                                        val active = selectedTab == index
+                                        Box(
+                                            Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(28.dp))
+                                                .background(if (active) Color(0xFF292929) else Color.Transparent)
+                                                .combinedClickable(
+                                                    onClick = { selectedTab = index; caseFiltersExpanded = false; if (index == 1) currentFilter = Filter.All },
+                                                    onLongClick = { if (index == 1) { selectedTab = 1; caseFiltersExpanded = !caseFiltersExpanded } }
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(icon, description, tint = if (active) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(27.dp))
+                                        }
+                                    }
+                                    NavIcon(0, Icons.Outlined.Home, "Dashboard")
+                                    NavIcon(1, Icons.Outlined.Inbox, "All Cases")
+                                    NavIcon(2, Icons.Outlined.NotificationsNone, "Future page")
+                                    NavIcon(3, Icons.Outlined.Layers, "Future page")
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Surface(
+                                    onClick = { selectedTab = 1; caseFiltersExpanded = false; caseToEdit = null; showAddEditDialog = true },
+                                    shape = androidx.compose.foundation.shape.CircleShape,
+                                    color = Color(0xFF171717),
+                                    border = BorderStroke(1.dp, Color(0xFF292929)),
+                                    modifier = Modifier.size(62.dp).testTag("add_case_button")
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Add, "Register New Case", tint = Color.White, modifier = Modifier.size(32.dp))
                                     }
                                 }
                             }
                         }
-                    }
+                    },
             ) { innerPadding ->
                 Box(
                     modifier = Modifier
@@ -521,8 +553,11 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                         }
                     }
 
-                        // 1. The Main Content (Search bar, Loading/Empty stats, LazyColumn list of cases)
-                        Column(modifier = Modifier.fillMaxSize()) {
+                        when (selectedTab) {
+                            0 -> DashboardOverview(casesState.value)
+                            2, 3 -> UnderDevelopmentPage()
+                            else -> {
+
                             // Search text field
                             Surface(
                                 modifier = Modifier
@@ -716,6 +751,8 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                         )
                                     }
                                 }
+                            }
+                        
                             }
                         }
                     }
@@ -1173,6 +1210,50 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             },
             onBack = { showTasksScreen = false }
         )
+    }
+}
+
+
+@Composable
+private fun DashboardOverview(cases: List<CaseRecord>) {
+    val settled = cases.count { it.status.equals("Settled", true) }
+    val notSettled = cases.count { it.status.equals("Not Settled", true) }
+    val pending = cases.count { it.status.equals("Pending", true) || it.status.equals("Registered", true) || it.status.equals("Mediation 1.0", true) }
+    val mediators = cases.groupingBy { it.mediator.ifBlank { "Unassigned" } }.eachCount().toList().sortedByDescending { it.second }
+    val categories = cases.groupingBy { it.category.ifBlank { "Unspecified" } }.eachCount().toList().sortedByDescending { it.second }
+    val pendingCategories = cases.filter { it.status.equals("Pending", true) || it.status.equals("Registered", true) || it.status.equals("Mediation 1.0", true) }
+        .groupingBy { it.category.ifBlank { "Unspecified" } }.eachCount().toList().sortedByDescending { it.second }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Dashboard", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold); Text("Overview of all mediation records", color = TextMuted, fontSize = 13.sp) }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { DashboardMetric("Total Cases", cases.size.toString(), Modifier.weight(1f)); DashboardMetric("Pending", pending.toString(), Modifier.weight(1f)) } }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { DashboardMetric("Settled", settled.toString(), Modifier.weight(1f)); DashboardMetric("Not Settled", notSettled.toString(), Modifier.weight(1f)) } }
+        item { Text("Cases by Mediator", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+        if (mediators.isEmpty()) item { Text("No case records available yet", color = TextMuted) }
+        items(mediators) { entry -> DashboardCountRow(entry.first, entry.second) }
+        item { Text("Cases by Category", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+        if (categories.isEmpty()) item { Text("No category data available yet", color = TextMuted) }
+        items(categories) { entry -> DashboardCountRow(entry.first, entry.second) }
+        item { Text("Pending Cases by Category", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+        if (pendingCategories.isEmpty()) item { Text("No pending cases", color = TextMuted) }
+        items(pendingCategories) { entry -> DashboardCountRow(entry.first, entry.second) }
+    }
+}
+@Composable
+private fun DashboardMetric(label: String, value: String, modifier: Modifier) {
+    Surface(modifier, color = Color(0xFF171717), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Color(0xFF292929))) {
+        Column(Modifier.padding(16.dp)) { Text(value, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold); Text(label, color = TextMuted, fontSize = 12.sp) }
+    }
+}
+@Composable
+private fun DashboardCountRow(label: String, count: Int) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF171717)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = TextSecondary, fontSize = 13.sp, modifier = Modifier.weight(1f)); Text(count.toString(), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+@Composable
+private fun UnderDevelopmentPage() {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Text("Page is currently under development", color = TextSecondary, fontSize = 16.sp, textAlign = TextAlign.Center)
     }
 }
 
