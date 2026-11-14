@@ -9,6 +9,10 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Shapes
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme =
@@ -26,10 +30,20 @@ private val DarkColorScheme =
     outline = DividerColor,
     outlineVariant = DividerColor,
     surfaceVariant = SecondarySurfaceColor,
-    onSurfaceVariant = TextSecondary
+    onSurfaceVariant = TextSecondary,
+    error = TextMuted,
+    onError = TextPrimary,
+    errorContainer = SecondarySurfaceColor,
+    onErrorContainer = TextPrimary
   )
 
 private val LightColorScheme = DarkColorScheme
+
+private val AppShapes = Shapes(
+  small = CircleShape,
+  medium = RoundedCornerShape(18.dp),
+  large = RoundedCornerShape(28.dp)
+)
 
 @Composable
 fun MyApplicationTheme(
@@ -41,5 +55,5 @@ fun MyApplicationTheme(
   // Strictly Dark Theme Only for the entire app as requested
   val colorScheme = DarkColorScheme
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  MaterialTheme(colorScheme = colorScheme, typography = Typography, shapes = AppShapes, content = content)
 }

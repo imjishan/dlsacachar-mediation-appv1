@@ -305,7 +305,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             drawerContent = {
                 ModalDrawerSheet(
                     modifier = Modifier.width(320.dp),
-                    drawerContainerColor = Color(0xFF090E17)
+                    drawerContainerColor = Color(0xFF141414)
                 ) {
                     SideDrawerContent(
                         cases = casesState.value,
@@ -433,30 +433,61 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                             }
                         }
                     },
-                    floatingActionButton = {
+                    bottomBar = {
                         if (showCaseDetailDialog == null) {
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp)
-                                    .background(
-                                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                            colors = listOf(PrimaryBlue, Color(0xFF635BFF))
-                                        ),
-                                        shape = RoundedCornerShape(20.dp)
-                                    )
-                                    .clickable {
-                                        caseToEdit = null
-                                        showAddEditDialog = true
-                                    }
-                                    .testTag("add_case_button"),
-                                contentAlignment = Alignment.Center
+                            Surface(
+                                color = BackgroundColor,
+                                tonalElevation = 8.dp,
+                                border = BorderStroke(1.dp, DividerColor)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Register New Case",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .navigationBarsPadding()
+                                        .padding(horizontal = 22.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceAround,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f).clickable { showTasksScreen = false },
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Description,
+                                            contentDescription = "Cases",
+                                            tint = if (!showTasksScreen) TextPrimary else TextMuted,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Text("Cases", color = if (!showTasksScreen) TextPrimary else TextMuted, fontSize = 11.sp)
+                                    }
+                                    Surface(
+                                        onClick = {
+                                            caseToEdit = null
+                                            showAddEditDialog = true
+                                        },
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = TextPrimary,
+                                        modifier = Modifier.size(50.dp).testTag("add_case_button")
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Add, contentDescription = "Register New Case", tint = BackgroundColor, modifier = Modifier.size(26.dp))
+                                        }
+                                    }
+                                    Column(
+                                        modifier = Modifier.weight(1f).clickable { showTasksScreen = true },
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Checklist,
+                                            contentDescription = "Tasks",
+                                            tint = if (showTasksScreen) TextPrimary else TextMuted,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Text("Tasks", color = if (showTasksScreen) TextPrimary else TextMuted, fontSize = 11.sp)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1150,7 +1181,7 @@ fun CustomDrawerItem(
     modifier: Modifier = Modifier
 ) {
     val backgroundColor by animateColorAsState(
-        targetValue = if (selected) Color(0xFF132238) else Color.Transparent,
+        targetValue = if (selected) Color(0xFF252525) else Color.Transparent,
         label = "BgColor"
     )
 
@@ -1193,7 +1224,7 @@ fun CustomDrawerItem(
             if (badge != null) {
                 Box(
                     modifier = Modifier
-                        .background(Color(0xFF152238), shape = androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0xFF303030), shape = androidx.compose.foundation.shape.CircleShape)
                         .padding(horizontal = 10.dp, vertical = 2.dp)
                 ) {
                     Text(
@@ -1202,7 +1233,7 @@ fun CustomDrawerItem(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         ),
-                        color = Color(0xFF94A3B8)
+                        color = Color(0xFFB0B0B0)
                     )
                 }
             }
@@ -1213,7 +1244,7 @@ fun CustomDrawerItem(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = Color(0xFF64748B),
+                    tint = Color(0xFF808080),
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -1239,10 +1270,10 @@ fun SideDrawerContent(
     onCloseDrawer: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val darkDrawerBg = Color(0xFF090E17)
-    val darkCardBg = Color(0xFF132238)
-    val mutedText = Color(0xFF64748B)
-    val subTextColor = Color(0xFF94A3B8)
+    val darkDrawerBg = Color(0xFF141414)
+    val darkCardBg = Color(0xFF252525)
+    val mutedText = Color(0xFF808080)
+    val subTextColor = Color(0xFFB0B0B0)
 
     Column(
         modifier = Modifier
@@ -1294,7 +1325,7 @@ fun SideDrawerContent(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Verified Badge",
-                            tint = Color(0xFF3B82F6),
+                            tint = Color(0xFFD0D0D0),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -1384,7 +1415,7 @@ fun SideDrawerContent(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = Color(0xFF10B981), // Bright Green
+                        tint = Color(0xFFB0B0B0), // Bright Green
                         modifier = Modifier.size(20.dp)
                     )
                 },
@@ -1402,7 +1433,7 @@ fun SideDrawerContent(
                     Icon(
                         imageVector = Icons.Default.Cancel,
                         contentDescription = null,
-                        tint = Color(0xFFEF4444), // Bright Red
+                        tint = Color(0xFF8C8C8C), // Bright Red
                         modifier = Modifier.size(20.dp)
                     )
                 },
@@ -1427,7 +1458,7 @@ fun SideDrawerContent(
                     Icon(
                         imageVector = Icons.Default.HourglassEmpty,
                         contentDescription = null,
-                        tint = Color(0xFF8B5CF6), // Bright Purple
+                        tint = Color(0xFFC0C0C0), // Bright Purple
                         modifier = Modifier.size(20.dp)
                     )
                 },
@@ -1436,7 +1467,7 @@ fun SideDrawerContent(
             )
 
             HorizontalDivider(
-                color = Color(0xFF1E293B),
+                color = Color(0xFF202020),
                 thickness = 1.dp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
             )
@@ -1451,24 +1482,6 @@ fun SideDrawerContent(
                 ),
                 color = mutedText,
                 modifier = Modifier.padding(start = 20.dp, bottom = 8.dp)
-            )
-
-            // Tasks & Notes
-            val pendingTasksCount = tasks.count { !it.isCompleted }
-            CustomDrawerItem(
-                label = "Tasks & Notes",
-                selected = false,
-                onClick = onOpenTasks,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Checklist,
-                        contentDescription = null,
-                        tint = if (pendingTasksCount > 0) WarningOrange else subTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                badge = if (pendingTasksCount > 0) pendingTasksCount.toString() else null,
-                showArrow = true
             )
 
             // Calendar
@@ -1528,7 +1541,7 @@ fun SideDrawerContent(
             // --- DYNAMIC FOLDER DIRECTORIES (Preserving folder structure feature) ---
             if (folderStructure.isNotEmpty()) {
                 HorizontalDivider(
-                    color = Color(0xFF1E293B),
+                    color = Color(0xFF202020),
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
                 )
@@ -1667,7 +1680,7 @@ fun SideDrawerContent(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp)
                 .background(
-                    color = Color(0xFF162B54),
+                    color = Color(0xFF303030),
                     shape = RoundedCornerShape(16.dp)
                 )
                 .clip(RoundedCornerShape(16.dp))
@@ -1683,7 +1696,7 @@ fun SideDrawerContent(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Color(0xFF0F1B36), shape = RoundedCornerShape(12.dp)),
+                        .background(Color(0xFF171717), shape = RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1820,7 +1833,7 @@ fun SideDrawerContent(
                 modifier = Modifier
                     .width(1.dp)
                     .height(12.dp)
-                    .background(Color(0xFF1E293B))
+                    .background(Color(0xFF202020))
             )
 
             Row(
@@ -1853,7 +1866,7 @@ fun SideDrawerContent(
                 modifier = Modifier
                     .width(1.dp)
                     .height(12.dp)
-                    .background(Color(0xFF1E293B))
+                    .background(Color(0xFF202020))
             )
 
             IconButton(
@@ -1970,7 +1983,7 @@ fun CaseRecordBentoCard(
         label = "BorderWidth"
     )
     val cardBorderColor by animateColorAsState(
-        targetValue = if (isSelected) PrimaryBlue else Color(0xFF1F355C),
+        targetValue = if (isSelected) PrimaryBlue else Color(0xFF303030),
         label = "BorderColor"
     )
     val cardScale by animateFloatAsState(
@@ -2036,7 +2049,7 @@ fun CaseRecordBentoCard(
                     // Category Tag (PRC)
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF1B2E53), shape = RoundedCornerShape(50))
+                            .background(Color(0xFF303030), shape = RoundedCornerShape(50))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -2055,10 +2068,10 @@ fun CaseRecordBentoCard(
                         else -> WarningOrange
                     }
                     val statusBg = when (case.status) {
-                        "Settled" -> Color(0xFF142921)
-                        "Not Settled" -> Color(0xFF2C1E1D)
-                        "Registered" -> Color(0xFF142921)
-                        else -> Color(0xFF2C241E)
+                        "Settled" -> Color(0xFF252525)
+                        "Not Settled" -> Color(0xFF252525)
+                        "Registered" -> Color(0xFF252525)
+                        else -> Color(0xFF252525)
                     }
 
                     var statusMenuExpanded by remember { mutableStateOf(false) }
@@ -2172,13 +2185,13 @@ fun CaseRecordBentoCard(
                     )
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF1B2E53), shape = RoundedCornerShape(6.dp))
+                            .background(Color(0xFF303030), shape = RoundedCornerShape(6.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                             .align(Alignment.CenterVertically)
                     ) {
                         Text(
                             text = "vs",
-                            color = Color(0xFF5B8CFF),
+                            color = Color(0xFFE5E5E5),
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp
                         )
@@ -2232,7 +2245,7 @@ fun DateSubCard(
     val displayDate = if (dateValue.isNotEmpty()) formatToDisplayImage(dateValue) else "N/A"
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = Color(0xFF111926), // Sleek lighter dark card container matching design
+        color = Color(0xFF171717), // Sleek lighter dark card container matching design
         modifier = modifier
     ) {
         Row(
@@ -3287,7 +3300,7 @@ fun CaseDetailContent(
                     .height(44.dp)
                     .background(
                         brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            colors = listOf(PrimaryBlue, Color(0xFF4361EE))
+                            colors = listOf(PrimaryBlue, Color(0xFFE5E5E5))
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -3443,22 +3456,22 @@ fun ImportantDatesRow(
             modifier = Modifier.weight(1f),
             title = "Intake Date",
             date = formatToDisplayImage(intakeDate),
-            iconColor = Color(0xFFFF9F43),
-            iconBgColor = Color(0xFF2C1E14)
+            iconColor = Color(0xFFB3B3B3),
+            iconBgColor = Color(0xFF252525)
         )
         DateItemCard(
             modifier = Modifier.weight(1f),
             title = "First Mediation",
             date = formatToDisplayImage(firstMediationDate),
-            iconColor = Color(0xFF5B8CFF),
-            iconBgColor = Color(0xFF16253B)
+            iconColor = Color(0xFFE5E5E5),
+            iconBgColor = Color(0xFF252525)
         )
         DateItemCard(
             modifier = Modifier.weight(1f),
             title = "Report Date",
             date = formatToDisplayImage(reportDate),
-            iconColor = Color(0xFF9B7BFF),
-            iconBgColor = Color(0xFF22163B)
+            iconColor = Color(0xFFCCCCCC),
+            iconBgColor = Color(0xFF252525)
         )
     }
 }
@@ -3473,7 +3486,7 @@ fun DateItemCard(
 ) {
     Row(
         modifier = modifier
-            .background(Color(0xFF0F1722), shape = RoundedCornerShape(8.dp))
+            .background(Color(0xFF171717), shape = RoundedCornerShape(8.dp))
             .border(1.dp, DividerColor.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
