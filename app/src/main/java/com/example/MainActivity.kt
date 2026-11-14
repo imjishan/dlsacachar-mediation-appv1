@@ -488,33 +488,40 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                         shape = RoundedCornerShape(40.dp),
                                         border = BorderStroke(1.dp, Color(0xFF292929))
                                     ) {
-                                  Row(
-                                    Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceEvenly
-                                ) {
-                                    @Composable
-                                    fun NavIcon(index: Int, icon: ImageVector, description: String) {
-                                        val active = selectedTab == index
-                                        Box(
-                                            Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(28.dp))
-                                                .background(if (active) Color(0xFF292929) else Color.Transparent)
-                                                .combinedClickable(
-                                                    onClick = { selectedTab = index; caseFiltersExpanded = false; if (index == 1) currentFilter = Filter.All },
-                                                    onLongClick = { if (index == 1) { selectedTab = 1; caseFiltersExpanded = !caseFiltersExpanded } }
-                                                ),
-                                            contentAlignment = Alignment.Center
+                                        Row(
+                                            Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceEvenly
                                         ) {
-                                            Icon(icon, description, tint = if (active) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(27.dp))
-                                          }
-                                }
-                                    }
-                                    NavIcon(0, Icons.Outlined.Home, "Dashboard")
-                                    NavIcon(1, Icons.Outlined.Inbox, "All Cases")
-                                    NavIcon(2, Icons.Outlined.NotificationsNone, "Future page")
-                                    NavIcon(3, Icons.Outlined.Layers, "Future page")
-                                }
-
+                                            @Composable
+                                            fun NavIcon(index: Int, icon: ImageVector, description: String) {
+                                                val active = selectedTab == index
+                                                Box(
+                                                    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(28.dp))
+                                                        .background(if (active) Color(0xFF292929) else Color.Transparent)
+                                                        .combinedClickable(
+                                                            onClick = {
+                                                                selectedTab = index
+                                                                caseFiltersExpanded = false
+                                                                if (index == 1) currentFilter = Filter.All
+                                                            },
+                                                            onLongClick = {
+                                                                if (index == 1) {
+                                                                    selectedTab = 1
+                                                                    caseFiltersExpanded = !caseFiltersExpanded
+                                                                }
+                                                            }
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(icon, description, tint = if (active) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(27.dp))
+                                                }
+                                            }
+                                            NavIcon(0, Icons.Outlined.Home, "Dashboard")
+                                            NavIcon(1, Icons.Outlined.Inbox, "All Cases")
+                                            NavIcon(2, Icons.Outlined.NotificationsNone, "Future page")
+                                            NavIcon(3, Icons.Outlined.Layers, "Future page")
+                                        }
                                     }
                                     Spacer(Modifier.width(12.dp))
                                     Surface(
