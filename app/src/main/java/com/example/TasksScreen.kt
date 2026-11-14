@@ -314,7 +314,7 @@ fun TasksScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                         ) {
-                            Text("Create Task", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Create Task", color = BackgroundColor, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
