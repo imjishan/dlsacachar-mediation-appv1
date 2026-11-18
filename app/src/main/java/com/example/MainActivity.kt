@@ -2305,17 +2305,8 @@ fun AddEditCaseDialog(
     var firstMediationDate by remember { mutableStateOf(if (caseToEdit != null) formatToDisplay(caseToEdit.firstMediationDate) else getTodayDisplayDate()) }
     var reportDate by remember { mutableStateOf(if (caseToEdit != null) formatToDisplay(caseToEdit.reportDate) else "") }
     var mediator by remember { mutableStateOf(caseToEdit?.mediator ?: "SRI ABDUR ROUF BARBHUIYA") }
+    var mediationType by remember { mutableStateOf(caseToEdit?.mediationType ?: "Mediation") }
     
-    var statusState by remember {
-        mutableStateOf(
-            when (caseToEdit?.status) {
-                "Settled" -> 1
-                "Not Settled" -> -1
-                else -> 0
-            }
-        )
-    }
-
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
@@ -2705,13 +2696,34 @@ fun AddEditCaseDialog(
                         )
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                    // Adaptive 3-state Case Status Selector
-                    ThreeStateToggle(
-                        state = statusState,
-                        onStateChange = { statusState = it }
-                    )
+                    // Type of Mediation dropdown
+                    Box(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            triggerSystemOptionPicker(
+                                context = context,
+                                title = "Select Type of Mediation",
+                                options = listOf("Normal Mediation", "Campaign Mediation"),
+                                currentValue = if (mediationType == "Campaign Mediation") "Campaign Mediation" else "Normal Mediation",
+                                onOptionSelected = { selected -> mediationType = if (selected == "Campaign Mediation") "Campaign Mediation" else "Mediation" }
+                            )
+                        }
+                    ) {
+                        OutlinedTextField(
+                            value = if (mediationType == "Campaign Mediation") "Campaign Mediation" else "Normal Mediation",
+                            onValueChange = {},
+                            readOnly = true,
+                            enabled = false,
+                            label = { Text("Type of Mediation") },
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Type of Mediation") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth().testTag("field_mediation_type_dropdown")
+                        )
+                    }
                 }
 
                 // Footer Buttons Section
@@ -2733,11 +2745,7 @@ fun AddEditCaseDialog(
                             if (cleanNo.isEmpty() || cleanPet.isEmpty() || cleanRes.isEmpty() || cleanDate.isEmpty()) {
                                 Toast.makeText(context, "Please populate Case Number, Informant, Respondent, and Intake Date!", Toast.LENGTH_LONG).show()
                             } else {
-                                val resolvedStatus = when (statusState) {
-                                    1 -> "Settled"
-                                    -1 -> "Not Settled"
-                                    else -> "Registered"
-                                }
+                                val resolvedStatus = caseToEdit?.status ?: "Registered"
                                 val cleanPetPhone = petitionerPhone.trim().ifEmpty { "N/A" }
                                 val cleanResPhone = respondentPhone.trim().ifEmpty { "N/A" }
                                 val finalizedCase = CaseRecord(
@@ -2754,7 +2762,8 @@ fun AddEditCaseDialog(
                                     firstMediationDate = formatToStorage(firstMediationDate),
                                     reportDate = formatToStorage(reportDate),
                                     mediator = mediator,
-                                    status = resolvedStatus
+                                    status = resolvedStatus,
+                                    mediationType = mediationType
                                 )
                                 onSave(finalizedCase)
                             }
