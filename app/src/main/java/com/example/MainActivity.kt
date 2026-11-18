@@ -33,6 +33,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -77,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -144,6 +146,9 @@ fun MainAppScreen(viewModel: CaseViewModel) {
     var currentFilter by remember { mutableStateOf<Filter>(Filter.All) }
     var searchText by remember { mutableStateOf("") }
     var showAddEditDialog by remember { mutableStateOf(false) }
+    var showHeaderMenu by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
     var showTasksScreen by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var caseFiltersExpanded by remember { mutableStateOf(false) }
@@ -361,84 +366,100 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .statusBarsPadding()
-                                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                                .padding(horizontal = 18.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Left Button (Menu)
                             Surface(
                                 onClick = {
                                     scope.launch {
                                         if (drawerState.isClosed) drawerState.open() else drawerState.close()
                                     }
                                 },
-                                shape = RoundedCornerShape(12.dp),
-                                color = SecondarySurfaceColor,
-                                border = BorderStroke(1.dp, DividerColor),
-                                modifier = Modifier.size(44.dp)
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                color = Color(0xFF202020).copy(alpha = 0.92f),
+                                border = BorderStroke(1.dp, Color(0xFF383838)),
+                                modifier = Modifier.size(46.dp).testTag("top_sidebar_button")
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Menu,
-                                        contentDescription = "Open Drawer Menu",
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    Icon(Icons.Default.Menu, contentDescription = "Open sidebar", tint = TextPrimary, modifier = Modifier.size(22.dp))
                                 }
                             }
 
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(Modifier.weight(1f))
 
-                            // Center Title / Subtitle
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Cachar DLSA Registry",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    ),
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = when (val filter = currentFilter) {
-                                        is Filter.All -> "All Records • ${casesState.value.size} Case${if (casesState.value.size == 1) "" else "s"}"
-                                        is Filter.Status -> "Filtered • ${filter.status}"
-                                        is Filter.MediationTypeStatus -> "${filter.type} • ${filter.status ?: "All Cases"}"
-                                        is Filter.MonthYear -> "Folder • ${filter.month} ${filter.year}"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Normal
-                                    ),
-                                    color = TextMuted
-                                )
-                            }
-
-                            // Delete selected button
                             if (isSelectionMode && selectedCases.isNotEmpty()) {
                                 Surface(
                                     onClick = {
                                         showMultiDeleteConfirmation = true
                                         multiDeleteConfirmationInput = ""
                                     },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                    shape = androidx.compose.foundation.shape.CircleShape,
+                                    color = Color(0xFF202020),
+                                    border = BorderStroke(1.dp, Color(0xFF383838)),
                                     modifier = Modifier.size(44.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete Selected Records",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete selected records", tint = TextPrimary, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                            }
+
+                            Surface(
+                                color = Color(0xFF202020).copy(alpha = 0.94f),
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                border = BorderStroke(1.dp, Color(0xFF383838))
+                            ) {
+                                Row(
+                                    modifier = Modifier.height(46.dp).padding(horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box {
+                                        IconButton(
+                                            onClick = { showHeaderMenu = true },
+                                            modifier = Modifier.size(40.dp).testTag("top_more_menu_button")
+                                        ) {
+                                            Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = TextPrimary, modifier = Modifier.size(22.dp))
+                                        }
+                                        DropdownMenu(
+                                            expanded = showHeaderMenu,
+                                            onDismissRequest = { showHeaderMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Settings") },
+                                                onClick = { showHeaderMenu = false; showSettingsDialog = true },
+                                                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Dark mode · Active") },
+                                                onClick = { showHeaderMenu = false },
+                                                leadingIcon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Light mode · Coming soon") },
+                                                onClick = {},
+                                                enabled = false,
+                                                leadingIcon = { Icon(Icons.Outlined.LightMode, contentDescription = null) }
+                                            )
+                                            HorizontalDivider()
+                                            DropdownMenuItem(text = { Text("Backup & Restore · Coming soon") }, onClick = {}, enabled = false)
+                                            DropdownMenuItem(text = { Text("Mediator Directory · Coming soon") }, onClick = {}, enabled = false)
+                                            DropdownMenuItem(text = { Text("Reports · Coming soon") }, onClick = {}, enabled = false)
+                                        }
+                                    }
+                                    Box(
+                                        modifier = Modifier.padding(end = 2.dp).size(40.dp)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .clickable { showProfileDialog = true }
+                                            .testTag("top_profile_button"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Outlined.AccountCircle, contentDescription = "Profile", tint = TextPrimary, modifier = Modifier.size(23.dp))
                                     }
                                 }
                             }
                         }
                     },
-
                     bottomBar = {
                         if (showCaseDetailDialog == null) {
                             Column(
@@ -549,6 +570,33 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                         .padding(innerPadding)
                         .background(MaterialTheme.colorScheme.background)
                 ) {
+                    // Soft monochrome ambient glow behind the content.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 82.dp, y = (-52).dp)
+                            .size(270.dp)
+                            .blur(58.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(Color(0xFF454545).copy(alpha = 0.34f), Color.Transparent)
+                                ),
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = (-105).dp, y = 58.dp)
+                            .size(220.dp)
+                            .blur(62.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(Color(0xFF292929).copy(alpha = 0.30f), Color.Transparent)
+                                ),
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                    )
                     val filteredCases = remember(casesState.value, currentFilter, searchText) {
                         val query = searchText.lowercase().trim()
                         casesState.value.filter { case ->
@@ -1061,6 +1109,36 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                 }
             }
         }
+    }
+
+    if (showSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("Settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Appearance", fontWeight = FontWeight.SemiBold)
+                    Text("Dark monochrome mode is currently active.")
+                    Text("Light mode and additional preferences will be introduced in a future update.", color = TextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSettingsDialog = false }) { Text("Done") }
+            }
+        )
+    }
+
+    if (showProfileDialog) {
+        AlertDialog(
+            onDismissRequest = { showProfileDialog = false },
+            title = { Text("Profile") },
+            text = {
+                Text("This is a local app profile. Profile details and editing will be available in a future update.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showProfileDialog = false }) { Text("Close") }
+            }
+        )
     }
 
     // Modal Form Dialog for Registering and Editing Cases
