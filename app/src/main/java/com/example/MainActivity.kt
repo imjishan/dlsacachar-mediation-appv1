@@ -794,6 +794,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                     ) + fadeOut(animationSpec = tween(250)),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    Box(Modifier.fillMaxSize()) {
                     // Dim the registry behind a bottom-anchored, rounded case sheet.
                     Box(
                         Modifier.fillMaxSize()
@@ -1044,6 +1045,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                     .fillMaxWidth()
                             )
                         }
+                    }
                     }
                 }
             }
