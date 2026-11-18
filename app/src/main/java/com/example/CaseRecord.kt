@@ -17,7 +17,8 @@ data class CaseRecord(
     val reportDate: String, // Date for report/fixing
     val mediator: String,
     val status: String, // "Registered", "Settled", "Not Settled", etc.
-    val nextDate: String = "" // Added for next session date tracking
+    val nextDate: String = "", // Added for next session date tracking
+    val mediationType: String = "Mediation" // "Mediation" or "Campaign Mediation"
 ) {
     val searchIndex: String by lazy {
         "$caseNumber|$petitioner|$petitionerPhone|$respondent|$respondentPhone|$mediator".lowercase()
@@ -41,7 +42,8 @@ object CaseRecordMapper {
   "reportDate": "${escapeJson(case.reportDate)}",
   "mediator": "${escapeJson(case.mediator)}",
   "status": "${escapeJson(case.status)}",
-  "nextDate": "${escapeJson(case.nextDate)}"
+  "nextDate": "${escapeJson(case.nextDate)}",
+  "mediationType": "${escapeJson(case.mediationType)}"
 }"""
     }
 
@@ -72,7 +74,8 @@ object CaseRecordMapper {
             reportDate = obj.optString("reportDate", ""),
             mediator = obj.optString("mediator", ""),
             status = obj.optString("status", ""),
-            nextDate = obj.optString("nextDate", "")
+            nextDate = obj.optString("nextDate", ""),
+            mediationType = obj.optString("mediationType", "Mediation").ifBlank { "Mediation" }
         )
     }
 
