@@ -1380,6 +1380,49 @@ fun CustomDrawerItem(
 
 // Side Navigation Drawer Content Redesigned
 @Composable
+private fun MediationTypeDrawerGroup(
+    title: String,
+    type: String,
+    cases: List<CaseRecord>,
+    currentFilter: Filter,
+    onFilterSelected: (Filter) -> Unit,
+    icon: ImageVector
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val typeCases = cases.filter { it.mediationType.equals(type, ignoreCase = true) }
+    val statuses = listOf(
+        "Registered" to Icons.Outlined.Description,
+        "Settled" to Icons.Default.CheckCircle,
+        "Not Settled" to Icons.Default.Cancel,
+        "Pending" to Icons.Default.HourglassEmpty
+    )
+    val activeType = currentFilter is Filter.MediationTypeStatus && currentFilter.type.equals(type, true)
+    CustomDrawerItem(
+        label = title,
+        selected = activeType && currentFilter.status == null,
+        onClick = { expanded = !expanded },
+        icon = { Icon(icon, contentDescription = null, tint = Color(0xFFB0B0B0), modifier = Modifier.size(18.dp)) },
+        badge = typeCases.size.toString(),
+        showArrow = true
+    )
+    AnimatedVisibility(visible = expanded || activeType, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        Column(Modifier.padding(start = 18.dp)) {
+            statuses.forEach { (status, statusIcon) ->
+                val count = if (status == "Pending") typeCases.count { it.status.equals("Pending", true) || it.status.equals("Mediation 1.0", true) }
+                    else typeCases.count { it.status.equals(status, true) }
+                CustomDrawerItem(
+                    label = status,
+                    selected = currentFilter is Filter.MediationTypeStatus && currentFilter.type.equals(type, true) && currentFilter.status.equals(status, true),
+                    onClick = { onFilterSelected(Filter.MediationTypeStatus(type, status)) },
+                    icon = { Icon(statusIcon, contentDescription = null, tint = Color(0xFFB0B0B0), modifier = Modifier.size(17.dp)) },
+                    badge = count.toString()
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun SideDrawerContent(
     cases: List<CaseRecord>,
     folderStructure: Map<String, List<String>>,
@@ -1514,77 +1557,26 @@ fun SideDrawerContent(
             )
 
             val allCasesCount = cases.size
-            val settledCount = cases.count { it.status.equals("Settled", ignoreCase = true) }
-            val notSettledCount = cases.count { it.status.equals("Not Settled", ignoreCase = true) }
-            val pendingCount = cases.count {
-                it.status.equals("Pending", ignoreCase = true) ||
-                    it.status.equals("Registered", ignoreCase = true) ||
-                    it.status.equals("Mediation 1.0", ignoreCase = true)
-            }
             var overviewExpanded by remember { mutableStateOf(true) }
-
             CustomDrawerItem(
                 label = "Overview",
                 selected = currentFilter is Filter.All,
                 onClick = { overviewExpanded = !overviewExpanded },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Description,
-                        contentDescription = null,
-                        tint = subTextColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
+                icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = subTextColor, modifier = Modifier.size(20.dp)) },
                 badge = allCasesCount.toString(),
                 showArrow = true
             )
-
-            AnimatedVisibility(
-                visible = overviewExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
+            AnimatedVisibility(visible = overviewExpanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                 Column(modifier = Modifier.padding(start = 18.dp)) {
                     CustomDrawerItem(
                         label = "All Cases",
                         selected = currentFilter is Filter.All,
                         onClick = { onFilterSelected(Filter.All) },
-                        icon = {
-                            Icon(Icons.Outlined.Description, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
-                        },
+                        icon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp)) },
                         badge = allCasesCount.toString()
                     )
-                    CustomDrawerItem(
-                        label = "Settled",
-                        selected = currentFilter is Filter.Status && currentFilter.status.equals("Settled", ignoreCase = true),
-                        onClick = { onFilterSelected(Filter.Status("Settled")) },
-                        icon = {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
-                        },
-                        badge = settledCount.toString()
-                    )
-                    CustomDrawerItem(
-                        label = "Not Settled",
-                        selected = currentFilter is Filter.Status && currentFilter.status.equals("Not Settled", ignoreCase = true),
-                        onClick = { onFilterSelected(Filter.Status("Not Settled")) },
-                        icon = {
-                            Icon(Icons.Default.Cancel, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
-                        },
-                        badge = notSettledCount.toString()
-                    )
-                    CustomDrawerItem(
-                        label = "Pending",
-                        selected = currentFilter is Filter.Status && (
-                            currentFilter.status.equals("Registered", ignoreCase = true) ||
-                                currentFilter.status.equals("Pending", ignoreCase = true) ||
-                                currentFilter.status.equals("Mediation 1.0", ignoreCase = true)
-                            ),
-                        onClick = { onFilterSelected(Filter.Status("Registered")) },
-                        icon = {
-                            Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = subTextColor, modifier = Modifier.size(18.dp))
-                        },
-                        badge = pendingCount.toString()
-                    )
+                    MediationTypeDrawerGroup("Mediation", "Mediation", cases, currentFilter, onFilterSelected, Icons.Outlined.Description)
+                    MediationTypeDrawerGroup("Campaign Mediation", "Campaign Mediation", cases, currentFilter, onFilterSelected, Icons.Outlined.Campaign)
                 }
             }
 
