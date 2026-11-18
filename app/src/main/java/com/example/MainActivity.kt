@@ -440,7 +440,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                     bottomBar = {
                         if (showCaseDetailDialog == null) {
                             Column(
-                                Modifier.fillMaxWidth().background(BackgroundColor).navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
+                                Modifier.fillMaxWidth().background(BackgroundColor).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 5.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 AnimatedVisibility(visible = caseFiltersExpanded && selectedTab == 1, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -483,13 +483,13 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                 }
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
-                                        modifier = Modifier.weight(1f).height(76.dp),
+                                        modifier = Modifier.weight(1f).height(58.dp),
                                         color = Color(0xFF171717),
                                         shape = RoundedCornerShape(40.dp),
                                         border = BorderStroke(1.dp, Color(0xFF292929))
                                     ) {
                                         Row(
-                                            Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
+                                            Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.SpaceEvenly
                                         ) {
@@ -514,7 +514,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                                         ),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(icon, description, tint = if (active) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(27.dp))
+                                                    Icon(icon, description, tint = if (active) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(23.dp))
                                                 }
                                             }
                                             NavIcon(0, Icons.Outlined.Home, "Dashboard")
@@ -523,16 +523,16 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                             NavIcon(3, Icons.Outlined.Layers, "Future page")
                                         }
                                     }
-                                    Spacer(Modifier.width(12.dp))
+                                    Spacer(Modifier.width(8.dp))
                                     Surface(
-                                        onClick = { selectedTab = 1; caseFiltersExpanded = false; caseToEdit = null; showAddEditDialog = true },
+                                        onClick = { caseFiltersExpanded = false; caseToEdit = null; showAddEditDialog = true },
                                         shape = androidx.compose.foundation.shape.CircleShape,
                                         color = Color(0xFF171717),
                                         border = BorderStroke(1.dp, Color(0xFF292929)),
-                                        modifier = Modifier.size(62.dp).testTag("add_case_button")
+                                        modifier = Modifier.size(50.dp).testTag("add_case_button")
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Add, "Register New Case", tint = Color.White, modifier = Modifier.size(32.dp))
+                                            Icon(Icons.Default.Add, "Register New Case", tint = Color.White, modifier = Modifier.size(27.dp))
                                         }
                                     }
                                 }
@@ -794,15 +794,23 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                     ) + fadeOut(animationSpec = tween(250)),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    // Dim the registry behind a bottom-anchored, rounded case sheet.
+                    Box(
+                        Modifier.fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.58f))
+                            .clickable { showCaseDetailDialog = null }
+                    )
                     val detailCase = showCaseDetailDialog
                     if (detailCase != null) {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize()
+                                .fillMaxWidth()
+                                .fillMaxHeight(0.92f)
+                                .align(Alignment.BottomCenter)
                                 .offset { IntOffset(0, currentDetailOffsetY.roundToInt()) }
                                 .nestedScroll(detailNestedScrollConnection)
+                                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
                                 .background(MaterialTheme.colorScheme.background)
-                                .statusBarsPadding()
                                 .navigationBarsPadding()
                         ) {
                             BackHandler(enabled = true) {
