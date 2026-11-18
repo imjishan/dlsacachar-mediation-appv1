@@ -126,6 +126,7 @@ class MainActivity : ComponentActivity() {
 sealed interface Filter {
     object All : Filter
     data class Status(val status: String) : Filter
+    data class MediationTypeStatus(val type: String, val status: String? = null) : Filter
     data class MonthYear(val year: String, val month: String) : Filter {
         override fun toString(): String = "$month $year"
     }
@@ -402,6 +403,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                     text = when (val filter = currentFilter) {
                                         is Filter.All -> "All Records • ${casesState.value.size} Case${if (casesState.value.size == 1) "" else "s"}"
                                         is Filter.Status -> "Filtered • ${filter.status}"
+                                        is Filter.MediationTypeStatus -> "${filter.type} • ${filter.status ?: "All Cases"}"
                                         is Filter.MonthYear -> "Folder • ${filter.month} ${filter.year}"
                                     },
                                     style = MaterialTheme.typography.labelSmall.copy(
@@ -553,6 +555,15 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                             val matchesFilter = when (val filter = currentFilter) {
                                 is Filter.All -> true
                                 is Filter.Status -> case.status.equals(filter.status, ignoreCase = true)
+                                is Filter.MediationTypeStatus -> {
+                                    val sameType = case.mediationType.equals(filter.type, ignoreCase = true)
+                                    val sameStatus = when (filter.status) {
+                                        null -> true
+                                        "Pending" -> case.status.equals("Pending", true) || case.status.equals("Mediation 1.0", true)
+                                        else -> case.status.equals(filter.status, ignoreCase = true)
+                                    }
+                                    sameType && sameStatus
+                                }
                                 is Filter.MonthYear -> {
                                     val yr = CaseRecordMapper.getYearFromDate(case.intakeDate)
                                     val mon = CaseRecordMapper.getMonthFromDate(case.intakeDate)
