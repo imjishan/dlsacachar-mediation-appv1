@@ -160,6 +160,7 @@ fun MainAppScreen(viewModel: CaseViewModel) {
     var showHeaderMenu by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showProfileDialog by remember { mutableStateOf(false) }
+    var isGlobalSearchExpanded by remember { mutableStateOf(false) }
     var showTasksScreen by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var caseFiltersExpanded by remember { mutableStateOf(false) }
@@ -454,6 +455,11 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                             onDismissRequest = { showHeaderMenu = false }
                                         ) {
                                             DropdownMenuItem(
+                                                text = { Text("Profile") },
+                                                onClick = { showHeaderMenu = false; showProfileDialog = true },
+                                                leadingIcon = { Icon(Icons.Outlined.AccountCircle, contentDescription = null) }
+                                            )
+                                            DropdownMenuItem(
                                                 text = { Text("Settings") },
                                                 onClick = { showHeaderMenu = false; showSettingsDialog = true },
                                                 leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) }
@@ -475,15 +481,53 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                                             DropdownMenuItem(text = { Text("Reports · Coming soon") }, onClick = {}, enabled = false)
                                         }
                                     }
-                                    Box(
-                                        modifier = Modifier.padding(end = 2.dp).size(40.dp)
-                                            .clip(androidx.compose.foundation.shape.CircleShape)
-                                            .clickable { showProfileDialog = true }
-                                            .testTag("top_profile_button"),
-                                        contentAlignment = Alignment.Center
+                                    IconButton(
+                                        onClick = { isGlobalSearchExpanded = !isGlobalSearchExpanded; if (!isGlobalSearchExpanded) searchText = "" },
+                                        modifier = Modifier.size(40.dp).testTag("top_search_button")
                                     ) {
-                                        Icon(Icons.Outlined.AccountCircle, contentDescription = "Profile", tint = TextPrimary, modifier = Modifier.size(23.dp))
+                                        Icon(
+                                            if (isGlobalSearchExpanded) Icons.Default.Close else Icons.Default.Search,
+                                            contentDescription = if (isGlobalSearchExpanded) "Close search" else "Search cases",
+                                            tint = TextPrimary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
+                                }
+                            }
+                            AnimatedVisibility(
+                                visible = isGlobalSearchExpanded,
+                                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                            ) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    color = Color(0xF01A1A1A),
+                                    shape = RoundedCornerShape(22.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF454545))
+                                ) {
+                                    TextField(
+                                        value = searchText,
+                                        onValueChange = { searchText = it },
+                                        singleLine = true,
+                                        placeholder = { Text("Search cases, parties, case numbers, mediator…", color = TextMuted) },
+                                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
+                                        trailingIcon = {
+                                            if (searchText.isNotEmpty()) {
+                                                IconButton(onClick = { searchText = "" }) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Clear search")
+                                                }
+                                            }
+                                        },
+                                        colors = TextFieldDefaults.colors(
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            focusedIndicatorColor = Color.Transparent,
+                                            unfocusedIndicatorColor = Color.Transparent,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(56.dp).testTag("global_search_field")
+                                    )
                                 }
                             }
                         }
@@ -658,76 +702,10 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                     }
 
                         when (selectedTab) {
-                            0 -> DashboardOverview(casesState.value)
+                            0 -> DashboardOverview(filteredCases)
                             2, 3 -> UnderDevelopmentPage()
                             else -> {
 
-                            // Search text field
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                color = InputFieldColor,
-                                border = BorderStroke(1.dp, DividerColor),
-                                shadowElevation = 0.dp
-                            ) {
-                                TextField(
-                                    value = searchText,
-                                    onValueChange = { searchText = it },
-                                    placeholder = { 
-                                        Text(
-                                            text = "Search by No., Petitioner, Opponent...",
-                                            color = TextMuted,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    },
-                                    leadingIcon = { 
-                                        Icon(
-                                            imageVector = Icons.Default.Search, 
-                                            contentDescription = "Search Icon",
-                                            tint = TextMuted
-                                        ) 
-                                    },
-                                    trailingIcon = {
-                                        if (searchText.isNotEmpty()) {
-                                            IconButton(onClick = { searchText = "" }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Clear, 
-                                                    contentDescription = "Clear Search",
-                                                    tint = TextSecondary
-                                                )
-                                            }
-                                        } else {
-                                            IconButton(onClick = {
-                                                scope.launch {
-                                                    if (drawerState.isClosed) drawerState.open() else drawerState.close()
-                                                }
-                                            }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Tune,
-                                                    contentDescription = "Filters",
-                                                    tint = PrimaryBlue
-                                                )
-                                            }
-                                        }
-                                    },
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        focusedTextColor = TextPrimary,
-                                        unfocusedTextColor = TextPrimary
-                                    ),
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("search_field_case")
-                                        .height(54.dp)
-                                )
-                            }
 
                             if (isSelectionMode) {
                                 Row(
