@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -116,6 +117,16 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Draw behind the status bar so the top gradient can fade naturally
+        // through the system-bar area instead of showing an opaque black strip.
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.decorView.systemUiVisibility =
+            (window.decorView.systemUiVisibility or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) and
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+
         setContent {
             MyApplicationTheme {
                 val caseViewModel: CaseViewModel = viewModel()
@@ -360,6 +371,23 @@ fun MainAppScreen(viewModel: CaseViewModel) {
             }
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
+                // Dark translucent veil at the top, fading smoothly into the page.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to Color(0xFF050505).copy(alpha = 0.94f),
+                                    0.28f to Color(0xFF080808).copy(alpha = 0.78f),
+                                    0.62f to Color(0xFF080808).copy(alpha = 0.38f),
+                                    1.0f to Color.Transparent
+                                )
+                            )
+                        )
+                )
                 Scaffold(
                     topBar = {
                         Row(
