@@ -535,7 +535,20 @@ fun MainAppScreen(viewModel: CaseViewModel) {
                     bottomBar = {
                         if (showCaseDetailDialog == null) {
                             Column(
-                                Modifier.fillMaxWidth().background(BackgroundColor).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 5.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colorStops = arrayOf(
+                                                0.0f to Color.Transparent,
+                                                0.24f to Color(0xFF080808).copy(alpha = 0.18f),
+                                                0.62f to Color(0xFF080808).copy(alpha = 0.62f),
+                                                1.0f to Color(0xFF080808).copy(alpha = 0.94f)
+                                            )
+                                        )
+                                    )
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 14.dp, vertical = 5.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 AnimatedVisibility(visible = caseFiltersExpanded && selectedTab == 1, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
